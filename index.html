@@ -1,0 +1,762 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>body{margin:0}[hidden]{display:none!important}</style>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<title>Biomed Board</title>
+<style>
+/* Layout: a desk surface with one oversized index card (the task now), and a row of small cards (later today) beneath it. */
+:root{
+  --desk:#dfe5ee; --desk-ink:#1d2a3d; --muted:#5c6b80;
+  --card:#1f7a4d; --card-flash:#2fae6c; --card-deep:#16603b; --card-line:#2c8a5a; --card-rule:#ffd54a; --card-ink:#ffffff;
+  --panel:#fbfdfb; --panel-ink:#18202c; --panel-line:#cfe0d6;
+  --up-bg:#2457c5; --up-ink:#ffffff; --up-time:#d3e1ff; --done-bg:#d3d7dd; --done-ink:#4a5260;
+  --accent:#2457c5; --accent-ink:#ffffff; --chip:#eef4f0; --danger:#b3322e;
+  --shadow:0 1px 0 rgba(20,30,50,.06),0 12px 30px -12px rgba(20,30,50,.35);
+  --f-display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
+  --f-body:"Atkinson Hyperlegible",ui-sans-serif,system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --desk:#111824; --desk-ink:#e6ebf3; --muted:#93a1b6;
+  --card:#17663f; --card-flash:#23935a; --card-deep:#0f4a2d; --card-line:#21774c; --card-rule:#ffd54a; --card-ink:#f2fff6;
+  --panel:#1c2534; --panel-ink:#f1f4f9; --panel-line:#2f3d52;
+  --up-bg:#2f62d6; --up-ink:#ffffff; --up-time:#cddcff; --done-bg:#2b313b; --done-ink:#a7b0bd;
+  --accent:#7aa2ff; --accent-ink:#0b1220; --chip:#243045; --danger:#ff8a84;
+  --shadow:0 1px 0 rgba(0,0,0,.3),0 14px 34px -14px rgba(0,0,0,.8); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --desk:#111824; --desk-ink:#e6ebf3; --muted:#93a1b6;
+  --card:#17663f; --card-flash:#23935a; --card-deep:#0f4a2d; --card-line:#21774c; --card-rule:#ffd54a; --card-ink:#f2fff6;
+  --panel:#1c2534; --panel-ink:#f1f4f9; --panel-line:#2f3d52;
+  --up-bg:#2f62d6; --up-ink:#ffffff; --up-time:#cddcff; --done-bg:#2b313b; --done-ink:#a7b0bd;
+  --accent:#7aa2ff; --accent-ink:#0b1220; --chip:#243045; --danger:#ff8a84;
+  --shadow:0 1px 0 rgba(0,0,0,.3),0 14px 34px -14px rgba(0,0,0,.8); color-scheme:dark}
+*{box-sizing:border-box}
+html,body{min-height:100%}
+body{background:var(--desk);color:var(--desk-ink);font-family:var(--f-body);font-size:16px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px 32px}
+.wrap{max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:24px}
+header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px}
+.brand{display:flex;flex-direction:column}
+.brand h1{font-family:var(--f-display);font-weight:800;font-size:1.25rem;margin:0;letter-spacing:-.01em}
+.brand .date{color:var(--muted);font-size:.9rem}
+.clock{font-family:var(--f-mono);font-weight:600;font-size:clamp(1.6rem,4vw,2.4rem);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid transparent;padding:8px 14px;font-weight:700}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.btn-primary{background:var(--accent);color:var(--accent-ink)}
+.btn-ghost{background:transparent;color:var(--desk-ink);border-color:color-mix(in srgb,var(--desk-ink) 25%,transparent)}
+.btn-ghost[aria-pressed="true"]{background:var(--chip)}
+
+/* The big index card */
+.flash{position:relative;background:var(--card);color:var(--card-ink);border-radius:6px;box-shadow:var(--shadow);
+  padding:clamp(20px,4vw,48px);min-height:min(56vh,520px);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:16px;overflow:hidden}
+.flash .when{display:flex;flex-wrap:wrap;justify-content:center;align-items:baseline;gap:8px 16px;font-family:var(--f-mono);font-weight:600;font-size:clamp(1rem,2.4vw,1.4rem)}
+.badge{font-family:var(--f-body);font-size:.75rem;letter-spacing:.12em;text-transform:uppercase;padding:3px 10px;border-radius:99px;background:var(--card-rule);color:#1b3d2a}
+.badge.next{background:var(--card-ink);color:var(--card)}
+.flash h2{font-family:var(--f-display);font-weight:800;font-size:clamp(2.4rem,8vw,6.5rem);line-height:1;letter-spacing:-.03em;margin:0;text-wrap:balance;overflow-wrap:anywhere}
+.flash .note{font-size:clamp(1.05rem,2.2vw,1.5rem);max-width:60ch;margin:0 auto;color:color-mix(in srgb,var(--card-ink) 80%,transparent);overflow-wrap:anywhere}
+.flash .foot{margin-top:12px;display:flex;flex-wrap:wrap;justify-content:center;gap:8px 24px;font-size:1rem;color:color-mix(in srgb,var(--card-ink) 70%,transparent)}
+.flash .foot strong{color:var(--card-ink)}
+.flash.empty h2{font-size:clamp(2rem,6vw,4rem)}
+.flash.flip{animation:flip .5s ease}
+@keyframes flip{from{transform:perspective(1200px) rotateX(12deg);opacity:.6}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.flash.flip{animation:none}}
+
+.later h3{font-size:.8rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.mini-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
+.mini{background:var(--up-bg);color:var(--up-ink);border-radius:8px;padding:12px 14px;box-shadow:var(--shadow);min-width:0}
+.mini .t{font-family:var(--f-mono);font-weight:600;font-size:.95rem;color:var(--up-time)}
+.mini.done{box-shadow:none}
+.mini .st{font-size:.8rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-top:4px}
+.done-sec{margin-top:8px;background:var(--done-bg);border-radius:10px;padding:14px 16px 16px}
+.done-sec h3{color:var(--done-ink)}
+.bigclock{font-family:var(--f-mono);font-weight:600;font-size:clamp(4rem,16vw,12rem);font-variant-numeric:tabular-nums;letter-spacing:-.04em;line-height:1}
+.flash .gotit{background:var(--card-ink);color:var(--card);font-size:1.05rem;padding:10px 20px}
+.mini .n{font-family:var(--f-display);font-weight:600;font-size:1.15rem;line-height:1.2;overflow-wrap:anywhere}
+.mini .in{font-size:.85rem;color:color-mix(in srgb,var(--card-ink) 60%,transparent)}
+.later .none{color:var(--muted);margin:0}
+
+/* Drawer */
+.scrim{position:fixed;inset:0;background:rgba(10,15,25,.45);z-index:20}
+.drawer{--card-ink:var(--panel-ink);--card-line:var(--panel-line);position:fixed;top:0;right:0;bottom:0;width:min(440px,100%);background:var(--panel);color:var(--panel-ink);z-index:21;
+  padding:calc(20px + env(safe-area-inset-top,0px)) max(20px,env(safe-area-inset-right,0px)) calc(20px + env(safe-area-inset-bottom,0px)) 20px;
+  overflow-y:auto;display:flex;flex-direction:column;gap:18px;box-shadow:var(--shadow)}
+.drawer-head{display:flex;justify-content:space-between;align-items:center}
+.drawer h2{font-family:var(--f-display);font-weight:800;font-size:1.5rem;margin:0}
+form{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+label{display:flex;flex-direction:column;gap:4px;font-size:.85rem;font-weight:700;min-width:0}
+label.full{grid-column:1/-1}
+input,select,textarea{font:inherit;font-weight:400;padding:9px 10px;border-radius:6px;border:1px solid var(--card-line);background:var(--desk);color:var(--desk-ink);min-width:0;width:100%}
+textarea{resize:vertical;min-height:60px}
+.form-actions{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap}
+.daynav{display:flex;align-items:center;gap:8px}
+.daynav input{flex:1}
+.list{display:flex;flex-direction:column;gap:6px;padding:0;margin:0;list-style:none}
+.list li{display:grid;grid-template-columns:64px 1fr auto;gap:10px;align-items:center;padding:8px 10px;background:var(--chip);border-radius:6px}
+.list .lt{font-family:var(--f-mono);font-weight:600;font-variant-numeric:tabular-nums}
+.list .ln{min-width:0;overflow-wrap:anywhere}
+.list .ln small{display:block;color:color-mix(in srgb,var(--card-ink) 60%,transparent)}
+.list .lb{display:flex;gap:4px}
+.list button{padding:4px 8px;font-size:.8rem;background:transparent;border:1px solid var(--card-line);color:var(--card-ink)}
+.list button.del{color:var(--danger)}
+.msg{font-size:.85rem;color:var(--muted);margin:0}
+.msg.err{color:var(--danger)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--desk-ink);color:var(--desk);padding:10px 16px;border-radius:8px;z-index:30;font-weight:700}
+@media (max-width:520px){form{grid-template-columns:1fr}}
+
+/* 5-minute heads-up: full-screen flashing card */
+.alert{position:fixed;inset:0;z-index:40;background:var(--card);color:var(--card-ink);overflow-y:auto;display:flex;
+  padding:calc(24px + env(safe-area-inset-top,0px)) max(20px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) max(20px,env(safe-area-inset-left,0px));
+  animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{background:var(--card)}50%{background:var(--card-flash)}}
+.alert-inner{flex:1;margin:0 auto;width:100%;max-width:1100px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:20px}
+.alert .alert-main{margin-block:auto;display:flex;flex-direction:column;align-items:center;gap:20px}
+.alert .later-block{padding-top:32px}
+.alert-inner > div{width:100%}
+.alert .top{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:12px 20px;font-family:var(--f-mono);font-weight:600;font-size:clamp(1.1rem,3vw,1.8rem)}
+.alert .badge{font-size:clamp(.85rem,1.6vw,1.1rem);padding:6px 14px}
+.alert .count{font-variant-numeric:tabular-nums}
+.alert h2{font-family:var(--f-display);font-weight:800;font-size:clamp(3rem,11vw,9rem);line-height:.95;letter-spacing:-.03em;margin:0;text-wrap:balance;overflow-wrap:anywhere}
+.alert .mini{text-align:left}
+.alert .note{font-size:clamp(1.1rem,2.6vw,1.8rem);margin:0 auto;max-width:60ch;overflow-wrap:anywhere;opacity:.9}
+.alert h3{font-size:.85rem;letter-spacing:.14em;text-transform:uppercase;margin:12px 0 10px;opacity:.85}
+.alert .none{margin:0;opacity:.85}
+.alert-dismiss{background:var(--card-ink);color:var(--card);font-size:1.05rem;padding:10px 20px}
+@media (prefers-reduced-motion:reduce){.alert{animation:none}}
+
+/* Link views: #add = task entry page, #display = board only */
+body.mode-add main,body.mode-add .later,body.mode-add .scrim,body.mode-add #openAdd,body.mode-add #soundBtn,body.mode-add #fsBtn,body.mode-add #closeDrawer,body.mode-add .alert{display:none!important}
+body.mode-add .drawer{position:static;width:100%;max-width:640px;margin:0 auto;border-radius:8px;padding:24px max(20px,env(safe-area-inset-right,0px)) 24px 20px}
+header .clock,header .actions{display:none!important}
+/* Fit-to-screen board: everything sized from the viewport so it fits any monitor without scrolling */
+html:has(body:not(.mode-add)){height:100%}
+body:not(.mode-add){height:100%;padding-block:clamp(8px,1.6vh,20px)}
+body:not(.mode-add) .wrap{max-width:min(100%,2200px);height:100%;gap:clamp(8px,1.8vh,24px)}
+body:not(.mode-add) header{flex:none}
+body:not(.mode-add) .brand h1{font-size:clamp(1rem,2.4vh,2rem)}
+body:not(.mode-add) .brand .date{font-size:clamp(.8rem,1.6vh,1.3rem)}
+body:not(.mode-add) main{flex:1 1 auto;min-height:28vh;display:flex}
+body:not(.mode-add) .flash{flex:1;min-height:0;padding:clamp(12px,3vh,48px) clamp(16px,3vw,48px);gap:clamp(8px,2vh,24px)}
+body:not(.mode-add) .flash h2{font-size:clamp(2rem,min(9vw,13vh),11rem)}
+body:not(.mode-add) .flash .note{font-size:clamp(1rem,min(2.6vw,3.2vh),2.4rem)}
+body:not(.mode-add) .flash .foot{font-size:clamp(.9rem,min(1.8vw,2.2vh),1.6rem);margin-top:0}
+body:not(.mode-add) .bigclock{font-size:clamp(3rem,min(17vw,26vh),18rem)}
+body:not(.mode-add) .flash .gotit{font-size:clamp(.95rem,2vh,1.6rem);padding:.5em 1.2em}
+body:not(.mode-add) .later{flex:none}
+body:not(.mode-add) .later h3{font-size:clamp(.7rem,1.4vh,1.1rem);margin-bottom:clamp(4px,1vh,12px)}
+.mini-row{grid-template-columns:repeat(auto-fill,minmax(clamp(130px,13vw,260px),1fr));gap:clamp(6px,1.2vh,14px)}
+.mini{padding:clamp(6px,1.2vh,16px) clamp(10px,1.2vw,18px)}
+.mini .t{font-size:clamp(.8rem,1.6vh,1.3rem)}
+.mini .n{font-size:clamp(.95rem,2.2vh,1.8rem)}
+.mini .st{font-size:clamp(.65rem,1.3vh,1rem)}
+body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(10px,1.4vw,18px)}
+.alert .alert-main{gap:clamp(10px,2.5vh,28px)}
+.alert h2{font-size:clamp(2.4rem,min(11vw,15vh),12rem)!important}
+.alert .note{font-size:clamp(1rem,min(2.6vw,3.2vh),2.4rem)!important}
+.alert-dismiss{font-size:clamp(1rem,2.2vh,1.8rem)!important;padding:.5em 1.4em!important}
+.alert .later-block{padding-top:clamp(12px,3vh,32px)}
+.sched{border-top:1px solid var(--panel-line);padding-top:14px}
+.sched summary{cursor:pointer;font-weight:700;color:var(--muted);font-size:.9rem;list-style:none;display:inline-flex;align-items:center;gap:6px}
+.sched summary::-webkit-details-marker{display:none}
+.sched summary::before{content:"▸";transition:transform .15s}
+.sched[open] summary::before{transform:rotate(90deg)}
+.pinbox{display:flex;flex-direction:column;gap:8px;grid-template-columns:none}
+.pinrow{display:flex;gap:8px;flex-wrap:wrap}
+.pinrow input{flex:1;min-width:120px;letter-spacing:.3em;font-family:var(--f-mono)}
+.sched-body{display:flex;flex-direction:column;gap:12px;margin-top:12px}
+.locked{max-width:520px;margin:10vh auto 0;text-align:center;background:var(--panel);color:var(--panel-ink);border-radius:8px;padding:28px 24px}
+.locked h2{font-family:var(--f-display);font-weight:800;margin:0 0 8px}
+.locked p{margin:0;color:var(--muted)}
+.fs-hint{position:fixed;left:50%;transform:translateX(-50%);top:calc(16px + env(safe-area-inset-top,0px));z-index:35;background:var(--desk-ink);color:var(--desk);padding:10px 18px;border-radius:99px;font-weight:700;cursor:pointer;box-shadow:var(--shadow)}
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <h1>Biomed Board</h1>
+      <span class="date" id="today"></span>
+    </div>
+    <div class="clock" id="clock" aria-live="off">--:--</div>
+    <div class="actions">
+      <button class="btn-primary" id="openAdd" type="button">+ Add task</button>
+      <button class="btn-ghost" id="soundBtn" type="button" aria-pressed="false">Chime off</button>
+      <button class="btn-ghost" id="fsBtn" type="button">Full screen</button>
+    </div>
+  </header>
+
+  <main id="board">
+    <article class="flash empty" id="flash" aria-live="polite">
+      <div class="when"><span class="badge next">Loading</span></div>
+      <h2>Getting your tasks…</h2>
+    </article>
+  </main>
+
+  <section class="later" aria-labelledby="laterH">
+    <h3 id="laterH">Coming up today</h3>
+    <div class="mini-row" id="later"></div>
+  </section>
+
+  <section class="later done-sec" id="doneSec" aria-labelledby="doneH" hidden>
+    <h3 id="doneH">Completed &amp; past</h3>
+    <div class="mini-row" id="doneRow"></div>
+  </section>
+</div>
+
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" hidden aria-labelledby="drawerH">
+  <div class="drawer-head">
+    <h2 id="drawerH">Add a task</h2>
+    <button class="btn-ghost" id="closeDrawer" type="button" style="color:var(--card-ink)">Close</button>
+  </div>
+  <form id="taskForm" autocomplete="off">
+    <input type="hidden" id="f-id">
+    <label class="full">Task<input id="f-title" required maxlength="120" placeholder="e.g. Team standup"></label>
+    <label>Date<input id="f-date" type="date" required></label>
+    <label>Time<input id="f-time" type="time" required></label>
+    <label class="full">Repeats
+      <select id="f-repeat">
+        <option value="none">Just this day</option>
+        <option value="daily">Every day</option>
+        <option value="weekdays">Weekdays (Mon–Fri)</option>
+      </select>
+    </label>
+    <label class="full">Note (optional)<textarea id="f-note" maxlength="300" placeholder="Room, link, what to bring…"></textarea></label>
+    <div class="form-actions">
+      <button class="btn-primary" type="submit" id="saveBtn">Save task</button>
+      <button class="btn-ghost" type="button" id="resetBtn" style="color:var(--card-ink)">Clear</button>
+    </div>
+    <p class="msg full" id="formMsg" style="grid-column:1/-1"></p>
+  </form>
+  <details class="sched" id="sched">
+  <summary id="schedSum">Show scheduled tasks</summary>
+  <div class="sched-body">
+  <div>
+    <div class="daynav">
+      <button class="btn-ghost" type="button" id="prevDay" style="color:var(--card-ink)" aria-label="Previous day">‹</button>
+      <input type="date" id="listDate" aria-label="Show tasks for date">
+      <button class="btn-ghost" type="button" id="nextDay" style="color:var(--card-ink)" aria-label="Next day">›</button>
+    </div>
+  </div>
+  <ul class="list" id="dayList"></ul>
+  </div>
+  </details>
+  <form class="pinbox" id="pinBox" hidden autocomplete="off">
+    <label for="pinInput">Enter PIN to see scheduled tasks</label>
+    <div class="pinrow">
+      <input id="pinInput" type="password" inputmode="numeric" maxlength="8" autocomplete="off">
+      <button class="btn-primary" type="submit">Unlock</button>
+      <button class="btn-ghost" type="button" id="pinCancel" style="color:var(--card-ink)">Cancel</button>
+    </div>
+    <p class="msg err" id="pinMsg"></p>
+  </form>
+  <p class="msg" id="storeMsg"></p>
+</aside>
+<div class="locked" id="locked" hidden>
+  <h2>Biomed Board</h2>
+  <p>Only the board's owner can add or change tasks here.</p>
+</div>
+<div class="toast" id="toast" hidden></div>
+<div class="fs-hint" id="fsHint" hidden>Click anywhere for full screen</div>
+
+<div class="alert" id="alert" hidden role="alertdialog" aria-labelledby="alertTitle">
+  <div class="alert-inner">
+    <div class="top" id="alertTop" hidden>
+      <span class="badge count" id="alertCount">Starting in 5:00</span>
+      <span id="alertTime"></span>
+    </div>
+    <div class="alert-main">
+      <h2 id="alertTitle"></h2>
+      <p class="note" id="alertNote"></p>
+      <button class="alert-dismiss" id="alertDismiss" type="button">Got it</button>
+    </div>
+    <div class="later-block">
+      <h3>Coming up today</h3>
+      <div class="mini-row" id="alertLater"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const pad = n => String(n).padStart(2, "0");
+  const ymd = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+  const parseYmd = s => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+  const fmt12 = hm => { const [h, m] = hm.split(":").map(Number); return ((h % 12) || 12) + ":" + pad(m) + (h < 12 ? " AM" : " PM"); };
+  const mins = hm => { const [h, m] = hm.split(":").map(Number); return h * 60 + m; };
+  const LS = "taskboard.tasks.v1";
+
+  let tasks = [];
+  let mode = "";
+  let accessKnown = false;
+  // The add page shows only to the board's owner; anyone else with the link sees a short notice.
+  function showAddPage() {
+    if (!accessKnown) { $("drawer").hidden = true; $("locked").hidden = true; return; }
+    $("drawer").hidden = !canWrite; $("locked").hidden = canWrite;
+    if (canWrite) renderDayList();
+  }
+  let canWrite = true;
+  let store = null;
+  let lastKey = "";
+  let soundOn = false, audioCtx = null;
+
+  // ---------- storage ----------
+  const localStore = {
+    kind: "local",
+    load() { try { return JSON.parse(localStorage.getItem(LS) || "[]"); } catch { return []; } },
+    persist() { try { localStorage.setItem(LS, JSON.stringify(tasks)); } catch {} },
+    async save(t) { const i = tasks.findIndex(x => x.id === t.id); if (i >= 0) tasks[i] = t; else tasks.push(t); this.persist(); render(true); },
+    async remove(id) { tasks = tasks.filter(x => x.id !== id); this.persist(); render(true); },
+    async markDone(id, date) { this.persist(); }
+  };
+
+  // Mark a task complete for one day (repeating tasks are completed per day).
+  async function markDone(t, date) {
+    if (!t) return;
+    const local = tasks.find(x => x.id === t.id);
+    if (local) { local.done = { ...(local.done || {}), [date]: true }; }
+    render(true);
+    if (!store || !canWrite) return;
+    try { await store.markDone(t.id, date); } catch { toast("Couldn't save. It will show as not done on other screens."); }
+  }
+
+  function useLocal(note) {
+    store = localStore;
+    if (!accessKnown) { accessKnown = true; if (mode === "add") showAddPage(); }
+    tasks = localStore.load();
+    $("storeMsg").textContent = note || "Saved in this browser only.";
+    render(true);
+  }
+
+  // Keep every open tab in this browser in sync (e.g. the #add tab and the #display tab on another monitor).
+  window.addEventListener("storage", e => {
+    if (e.key === LS && store === localStore) { tasks = localStore.load(); render(true); }
+  });
+
+  // ---------- shared office server (when the page is opened from server.py) ----------
+  async function api(method, url, body) {
+    const r = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined, cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json().catch(() => null);
+  }
+  let lastSig = "";
+  async function refreshFromServer() {
+    try {
+      const d = await api("GET", "api/tasks");
+      const sig = JSON.stringify(d.tasks);
+      if (sig !== lastSig) { lastSig = sig; tasks = d.tasks; render(true); }
+      $("storeMsg").textContent = "Shared with every office computer on the Biomed Board.";
+    } catch { $("storeMsg").textContent = "Can't reach the board computer. Check that it's on and the board window is open."; }
+  }
+  async function tryServer() {
+    if (!/^https?:$/.test(location.protocol)) return false;
+    try { const d = await api("GET", "api/tasks"); return Array.isArray(d?.tasks); } catch { return false; }
+  }
+  async function useServer() {
+    canWrite = true; accessKnown = true;
+    store = {
+      kind: "server",
+      async save(t) { await api("POST", "api/tasks", t); await refreshFromServer(); },
+      async remove(id) { await api("DELETE", "api/tasks/" + encodeURIComponent(id)); await refreshFromServer(); },
+      async markDone(id, date) { await api("POST", "api/tasks/" + encodeURIComponent(id) + "/done", { date }); }
+    };
+    if (mode === "add") showAddPage();
+    await refreshFromServer();
+    render(true);
+    setInterval(refreshFromServer, 3000);
+  }
+
+  // ---------- shared online task list (Firebase Realtime Database) ----------
+  const FB_CONFIG = {
+    apiKey: "AIzaSyBDi6oEKmZ6B6r9_wPk8nMIzr23hEX-5Y8",
+    authDomain: "foodfair-meat.firebaseapp.com",
+    databaseURL: "https://foodfair-meat-default-rtdb.firebaseio.com",
+    projectId: "foodfair-meat",
+    storageBucket: "foodfair-meat.firebasestorage.app",
+    messagingSenderId: "183879584210",
+    appId: "1:183879584210:web:52daf9dac7e40f8dd9a00b"
+  };
+  function useFirebase() {
+    if (!firebase.apps.length) firebase.initializeApp(FB_CONFIG);
+    const ref = firebase.database().ref("biomedBoard/tasks");
+    canWrite = true; accessKnown = true;
+    store = {
+      kind: "firebase",
+      async save(t) { const { id, ...body } = t; await ref.child(id).set(body); },
+      async remove(id) { await ref.child(id).remove(); },
+      async markDone(id, date) { await ref.child(id).child("done").child(date).set(true); }
+    };
+    if (mode === "add") showAddPage();
+    $("storeMsg").textContent = "Connecting to the shared task list…";
+    ref.on("value", snap => {
+      const v = snap.val() || {};
+      tasks = Object.entries(v).map(([id, d]) => ({ id, ...d }));
+      $("storeMsg").textContent = "Shared with everyone who uses this board.";
+      render(true);
+    }, err => {
+      $("storeMsg").textContent = "Can't reach the shared task list (" + (err && err.code || "error") + "). Tasks can't be saved right now.";
+    });
+  }
+
+  async function init() {
+    render(true);
+    if (window.firebase) { try { useFirebase(); return; } catch {} }
+    if (await tryServer()) { await useServer(); return; }
+    let db = null, user = null;
+    try { db = await window.claude?.use?.("db"); } catch {}
+    try { user = await window.claude?.use?.("user"); } catch {}
+    if (!db) { useLocal("Couldn\u2019t load the shared task list. Tasks are saved on this computer only."); return; }
+    try { canWrite = user ? !!(await user.isOwner()) : false; } catch { canWrite = false; }
+    accessKnown = true; if (mode === "add") showAddPage();
+    const col = db.collection("tasks");
+    store = {
+      kind: "db",
+      async save(t) { const { id, ...body } = t; await col.doc(id).set(body); },
+      async remove(id) { await col.doc(id).delete(); },
+      async markDone(id, date) { await col.doc(id).update({ done: { [date]: true } }); }
+    };
+    $("storeMsg").textContent = canWrite ? "Synced to your account. Open this page on any device." : "You can view this board but not change it.";
+    if (!canWrite) { $("openAdd").hidden = true; }
+    col.onSnapshot(snap => {
+      tasks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      render(true);
+    }, () => useLocal("Couldn't reach your saved tasks. Showing tasks saved in this browser."));
+  }
+
+  // ---------- schedule logic ----------
+  function occursOn(t, dateStr) {
+    if (!t.date || !t.time) return false;
+    if (!t.repeat || t.repeat === "none") return t.date === dateStr;
+    if (dateStr < t.date) return false;
+    if (t.repeat === "daily") return true;
+    if (t.repeat === "weekdays") { const d = parseYmd(dateStr).getDay(); return d >= 1 && d <= 5; }
+    return false;
+  }
+  const forDay = dateStr => tasks.filter(t => occursOn(t, dateStr)).sort((a, b) => a.time.localeCompare(b.time) || a.title.localeCompare(b.title));
+
+  function untilText(targetMin, nowMin) {
+    const d = targetMin - nowMin;
+    if (d <= 0) return "now";
+    const h = Math.floor(d / 60), m = d % 60;
+    return "in " + (h ? h + " hr " : "") + (m ? m + " min" : (h ? "" : "<1 min"));
+  }
+
+  // ---------- render ----------
+  function render(force) {
+    const now = new Date();
+    $("clock").textContent = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
+    $("today").textContent = now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
+
+    const bc = document.getElementById("bigClock");
+    if (bc) bc.textContent = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
+    const today = ymd(now);
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const list = forDay(today);
+    const isDone = t => !!(t.done && t.done[today]);
+    const open = list.filter(t => !isDone(t));
+    updateAlert(today, open, now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds(), nowMin);
+    let curIdx = -1;
+    open.forEach((t, i) => { if (mins(t.time) <= nowMin) curIdx = i; });
+    const current = curIdx >= 0 ? open[curIdx] : null;
+    const upcoming = open.slice(curIdx + 1);
+    const next = upcoming[0] || null;
+    const past = list.filter(t => t !== current && (isDone(t) || mins(t.time) <= nowMin));
+
+    const key = [today, nowMin, current?.id, current?.title, current?.note, list.map(t => t.id + t.time + t.title + (isDone(t) ? "1" : "0")).join("|")].join("~");
+    if (!force && key === lastKey) return;
+    const prevCur = lastKey.split("~")[2];
+    lastKey = key;
+
+    const flash = $("flash");
+    flash.innerHTML = "";
+    const when = document.createElement("div"); when.className = "when";
+    const h2 = document.createElement("h2");
+    const note = document.createElement("p"); note.className = "note";
+    const foot = document.createElement("div"); foot.className = "foot";
+
+    if (current) {
+      flash.classList.remove("empty");
+      when.innerHTML = '<span class="badge">Now</span>';
+      when.append(document.createTextNode(fmt12(current.time)));
+      h2.textContent = current.title;
+      note.textContent = current.note || "";
+      const left = document.createElement("span");
+      const right = document.createElement("span");
+      if (next) {
+        left.innerHTML = "Next: <strong></strong>";
+        left.querySelector("strong").textContent = next.title;
+        right.textContent = fmt12(next.time) + " · " + untilText(mins(next.time), nowMin);
+      } else {
+        left.textContent = "Last task of the day";
+      }
+      foot.append(left, right);
+    } else {
+      // Nothing running: show a big clock until the next task's time.
+      flash.classList.add("empty");
+      const clk = document.createElement("div"); clk.className = "bigclock"; clk.id = "bigClock";
+      clk.textContent = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+      flash.append(clk);
+    }
+    if (current) flash.append(h2);
+    if (note.textContent) flash.append(note);
+    if (current) {
+      const b = document.createElement("button"); b.type = "button"; b.className = "gotit"; b.textContent = "Got it";
+      b.onclick = () => markDone(current, today);
+      flash.append(b);
+    }
+    if (foot.childNodes.length) flash.append(foot);
+
+    if (current && prevCur !== undefined && prevCur !== String(current.id) && lastKey) {
+      flash.classList.remove("flip"); void flash.offsetWidth; flash.classList.add("flip");
+      if (soundOn) chime();
+    }
+
+    // later today: if no current, the "next" is already the big card
+    const rest = upcoming;
+    const row = $("later"); row.innerHTML = "";
+    if (!rest.length) {
+      const p = document.createElement("p"); p.className = "none";
+      p.textContent = list.length ? "Nothing else coming up today." : "No tasks today.";
+      row.append(p);
+    }
+    rest.forEach(t => {
+      const c = document.createElement("div"); c.className = "mini";
+      const tt = document.createElement("div"); tt.className = "t"; tt.textContent = fmt12(t.time);
+      const nn = document.createElement("div"); nn.className = "n"; nn.textContent = t.title;
+      c.append(tt, nn); row.append(c);
+    });
+
+    const drow = $("doneRow"); drow.innerHTML = "";
+    $("doneSec").hidden = !past.length;
+    past.forEach(t => {
+      const c = document.createElement("div"); c.className = "mini done";
+      const tt = document.createElement("div"); tt.className = "t"; tt.textContent = fmt12(t.time);
+      const nn = document.createElement("div"); nn.className = "n"; nn.textContent = t.title;
+      const st = document.createElement("div"); st.className = "st"; st.textContent = isDone(t) ? "✓ Completed" : "Not checked";
+      c.append(tt, nn, st); drow.append(c);
+    });
+
+    if (!$("drawer").hidden) renderDayList();
+  }
+
+  // ---------- 5-minute heads-up ----------
+  // Once shown, the alert stays (and keeps flashing) until someone taps "Got it".
+  let alertKey = "", alertTask = null;
+  const dismissed = new Set();
+  function updateAlert(today, list, nowSec, nowMin) {
+    const el = $("alert");
+    if (mode === "add") return;
+    const soon = list.find(t => { const d = mins(t.time) * 60 - nowSec; return d > 0 && d <= 300 && !dismissed.has(today + "|" + t.id + "|" + t.time); });
+    const key = soon ? today + "|" + soon.id + "|" + soon.time : "";
+    if (soon && key !== alertKey) showAlert(soon, key, list, nowMin);
+    if (!alertTask) { if (!el.hidden) el.hidden = true; return; }
+    const left = mins(alertTask.time) * 60 - nowSec;
+    if (left > 0) $("alertCount").textContent = "Starting in " + Math.floor(left / 60) + ":" + pad(left % 60);
+  }
+  function showAlert(soon, key, list, nowMin) {
+    const el = $("alert");
+    alertKey = key; alertTask = soon;
+    $("alertTitle").textContent = soon.title;
+    $("alertTime").textContent = "at " + fmt12(soon.time);
+    $("alertNote").textContent = soon.note || "";
+    $("alertNote").hidden = !soon.note;
+    const row = $("alertLater"); row.innerHTML = "";
+    const rest = list.filter(t => mins(t.time) > mins(soon.time));
+    if (!rest.length) { const p = document.createElement("p"); p.className = "none"; p.textContent = "Nothing else after this today."; row.append(p); }
+    rest.forEach(t => {
+      const c = document.createElement("div"); c.className = "mini";
+      const tt = document.createElement("div"); tt.className = "t"; tt.textContent = fmt12(t.time);
+      const nn = document.createElement("div"); nn.className = "n"; nn.textContent = t.title;
+      c.append(tt, nn); row.append(c);
+    });
+    if (!$("drawer").hidden) closeDrawer();
+    el.hidden = false;
+    if (soundOn) chime();
+  }
+  $("alertDismiss").onclick = () => {
+    const t = alertTask, k = alertKey;
+    if (k) dismissed.add(k);
+    $("alert").hidden = true; alertKey = ""; alertTask = null;
+    if (t) markDone(t, k.split("|")[0]);
+  };
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("alert").hidden) $("alertDismiss").click(); });
+
+  function renderDayList() {
+    const d = $("listDate").value || ymd(new Date());
+    const ul = $("dayList"); ul.innerHTML = "";
+    const items = forDay(d);
+    if (!items.length) { const li = document.createElement("li"); li.style.gridTemplateColumns = "1fr"; li.textContent = "No tasks on this day."; ul.append(li); return; }
+    items.forEach(t => {
+      const li = document.createElement("li");
+      const lt = document.createElement("span"); lt.className = "lt"; lt.textContent = fmt12(t.time);
+      const ln = document.createElement("span"); ln.className = "ln"; ln.textContent = t.title;
+      const meta = [t.repeat === "daily" ? "Every day" : t.repeat === "weekdays" ? "Weekdays" : "", t.note || ""].filter(Boolean).join(" · ");
+      if (meta) { const s = document.createElement("small"); s.textContent = meta; ln.append(s); }
+      const lb = document.createElement("span"); lb.className = "lb";
+      if (canWrite) {
+        const e = document.createElement("button"); e.type = "button"; e.textContent = "Edit"; e.onclick = () => fillForm(t);
+        const x = document.createElement("button"); x.type = "button"; x.className = "del"; x.textContent = "Delete";
+        x.onclick = async () => {
+          if (x.dataset.confirm !== "1") { x.dataset.confirm = "1"; x.textContent = "Sure?"; setTimeout(() => { x.dataset.confirm = ""; x.textContent = "Delete"; }, 3000); return; }
+          try { await store.remove(t.id); toast("Deleted"); } catch { toast("Couldn't delete. Try again."); }
+        };
+        lb.append(e, x);
+      }
+      li.append(lt, ln, lb); ul.append(li);
+    });
+  }
+
+  // ---------- form ----------
+  function resetForm(dateStr) {
+    $("f-id").value = ""; $("f-title").value = ""; $("f-note").value = ""; $("f-repeat").value = "none";
+    $("f-date").value = dateStr || $("listDate").value || ymd(new Date());
+    const n = new Date(Date.now() + 15 * 60000);
+    $("f-time").value = pad(n.getHours()) + ":" + pad(Math.floor(n.getMinutes() / 5) * 5);
+    $("drawerH").textContent = "Add a task"; $("saveBtn").textContent = "Save task"; $("formMsg").textContent = "";
+  }
+  function fillForm(t) {
+    $("f-id").value = t.id; $("f-title").value = t.title; $("f-date").value = t.date; $("f-time").value = t.time;
+    $("f-repeat").value = t.repeat || "none"; $("f-note").value = t.note || "";
+    $("drawerH").textContent = "Edit task"; $("saveBtn").textContent = "Update task"; $("f-title").focus();
+  }
+  function openDrawer() {
+    $("listDate").value = $("listDate").value || ymd(new Date());
+    resetForm(); $("scrim").hidden = false; $("drawer").hidden = false; renderDayList(); $("f-title").focus();
+  }
+  function closeDrawer() { if (mode === "add") return; $("scrim").hidden = true; $("drawer").hidden = true; $("openAdd").focus(); }
+
+  $("taskForm").addEventListener("submit", async e => {
+    e.preventDefault();
+    if (!store) return;
+    const t = {
+      id: $("f-id").value || ("t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)),
+      title: $("f-title").value.trim(), date: $("f-date").value, time: $("f-time").value,
+      repeat: $("f-repeat").value, note: $("f-note").value.trim(),
+      done: (tasks.find(x => x.id === $("f-id").value) || {}).done || {}
+    };
+    if (!t.title || !t.date || !t.time) { $("formMsg").className = "msg err"; $("formMsg").textContent = "Add a task name, date and time."; return; }
+    const editing = !!$("f-id").value;
+    $("saveBtn").disabled = true;
+    try {
+      await store.save(t);
+      toast(editing ? "Task updated" : "Task added");
+      $("listDate").value = t.date;
+      resetForm(t.date); renderDayList();
+    } catch (err) {
+      $("formMsg").className = "msg err";
+      $("formMsg").textContent = err?.code === "quota_exceeded" ? "The board is full. Delete some old tasks first." : "Couldn't save. Check your connection and try again.";
+    } finally { $("saveBtn").disabled = false; }
+  });
+
+  $("openAdd").onclick = openDrawer;
+  $("closeDrawer").onclick = closeDrawer;
+  $("scrim").onclick = closeDrawer;
+  $("resetBtn").onclick = () => resetForm();
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("drawer").hidden) closeDrawer(); });
+  $("listDate").addEventListener("change", () => { $("f-date").value = $("listDate").value; renderDayList(); });
+  const shiftDay = n => { const d = parseYmd($("listDate").value || ymd(new Date())); d.setDate(d.getDate() + n); $("listDate").value = ymd(d); $("f-date").value = ymd(d); renderDayList(); };
+  $("prevDay").onclick = () => shiftDay(-1);
+  $("nextDay").onclick = () => shiftDay(1);
+
+  // ---------- extras ----------
+  function toast(msg) { const el = $("toast"); el.textContent = msg; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => el.hidden = true, 1800); }
+
+  function chime() {
+    try {
+      const ctx = audioCtx; if (!ctx) return;
+      [660, 880].forEach((f, i) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.frequency.value = f; o.type = "sine";
+        g.gain.setValueAtTime(0.0001, ctx.currentTime + i * 0.22);
+        g.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + i * 0.22 + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + i * 0.22 + 0.6);
+        o.connect(g).connect(ctx.destination); o.start(ctx.currentTime + i * 0.22); o.stop(ctx.currentTime + i * 0.22 + 0.65);
+      });
+    } catch {}
+  }
+  $("soundBtn").onclick = () => {
+    soundOn = !soundOn;
+    if (soundOn && !audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch {} }
+    $("soundBtn").setAttribute("aria-pressed", String(soundOn));
+    $("soundBtn").textContent = soundOn ? "Chime on" : "Chime off";
+    if (soundOn) chime();
+  };
+
+  let wakeLock = null;
+  async function keepAwake() { try { wakeLock = await navigator.wakeLock?.request("screen"); } catch {} }
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { keepAwake(); render(true); } });
+  keepAwake();
+
+  $("fsBtn").onclick = async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await document.documentElement.requestFullscreen();
+    } catch { toast("Full screen isn't available here"); }
+  };
+  document.addEventListener("fullscreenchange", () => { $("fsBtn").textContent = document.fullscreenElement ? "Exit full screen" : "Full screen"; });
+
+  function applyMode() {
+    const h = (location.hash || "").slice(1);
+    mode = h === "add" || h === "display" ? h : "";
+    document.body.classList.toggle("mode-add", mode === "add");
+    document.body.classList.toggle("mode-display", mode === "display");
+    if (mode === "add") {
+      $("listDate").value = $("listDate").value || ymd(new Date());
+      resetForm(); $("scrim").hidden = true; showAddPage();
+    }
+    render(true);
+    if (typeof updateFsHint === "function") updateFsHint();
+  }
+  window.addEventListener("hashchange", applyMode);
+
+  // Display link: the first click or key press anywhere goes full screen.
+  const canFs = !!document.documentElement.requestFullscreen;
+  function updateFsHint() { $("fsHint").hidden = !(mode !== "add" && canFs && !document.fullscreenElement); }
+  async function enterFsFromGesture() {
+    if (mode === "add" || !canFs || document.fullscreenElement) return;
+    try { await document.documentElement.requestFullscreen(); keepAwake(); } catch {}
+  }
+  document.addEventListener("pointerdown", enterFsFromGesture);
+  document.addEventListener("keydown", e => { if (e.key !== "Escape") enterFsFromGesture(); });
+  document.addEventListener("fullscreenchange", updateFsHint);
+
+  // PIN lock on the scheduled-task list. Stores only a hash of the PIN; it relocks whenever the list is closed.
+  const PIN_HASH = "c0af0f57dc2fee130330c8adaa33eca6a67a1319c8756f121dd3c5404ef2ac08";
+  let schedUnlocked = false;
+  async function hashPin(p) {
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("biomed-board:" + p));
+    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
+  }
+  $("schedSum").addEventListener("click", e => {
+    if ($("sched").open) return; // closing is always allowed
+    if (schedUnlocked) return;
+    e.preventDefault();
+    $("pinBox").hidden = false; $("pinMsg").textContent = ""; $("pinInput").value = ""; $("pinInput").focus();
+  });
+  $("sched").addEventListener("toggle", () => { if (!$("sched").open) schedUnlocked = false; });
+  $("pinCancel").onclick = () => { $("pinBox").hidden = true; };
+  $("pinBox").addEventListener("submit", async e => {
+    e.preventDefault();
+    let ok = false;
+    try { ok = (await hashPin($("pinInput").value.trim())) === PIN_HASH; } catch {}
+    if (!ok) { $("pinMsg").textContent = "Wrong PIN. Try again."; $("pinInput").value = ""; $("pinInput").focus(); return; }
+    schedUnlocked = true; $("pinBox").hidden = true; $("pinInput").value = ""; $("sched").open = true; renderDayList();
+  });
+
+  setInterval(() => render(false), 1000);
+  applyMode();
+  updateFsHint();
+  init();
+})();
+</script>
+
+</body>
+</html>
