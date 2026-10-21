@@ -72,11 +72,14 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .mini .t{font-family:var(--f-mono);font-weight:600;font-size:.95rem;color:var(--up-time)}
 .mini.done{box-shadow:none;background:var(--comp-bg);color:var(--comp-ink)}
 .mini.done .t{color:var(--comp-time)}
-#doneRow{grid-template-columns:repeat(auto-fill,minmax(clamp(100px,9vw,170px),1fr));gap:clamp(4px,.8vh,10px)}
-#doneRow .mini{padding:clamp(4px,.7vh,10px) clamp(8px,.8vw,12px);border-radius:6px}
-#doneRow .mini .t{font-size:clamp(.65rem,1.2vh,.95rem)}
-#doneRow .mini .n{font-size:clamp(.75rem,1.5vh,1.1rem)}
-#doneRow .mini .st{font-size:clamp(.55rem,1vh,.8rem);margin-top:2px}
+/* Completed & past: one slim row of small chips */
+#doneRow{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:6px;padding-bottom:2px;scrollbar-width:thin}
+#doneRow .mini{flex:none;display:flex;align-items:baseline;gap:6px;white-space:nowrap;padding:3px 10px;border-radius:99px;max-width:260px}
+#doneRow .mini .t{font-size:clamp(.6rem,1vh,.8rem)}
+#doneRow .mini .n{font-size:clamp(.65rem,1.1vh,.85rem);font-weight:600;overflow:hidden;text-overflow:ellipsis;min-width:0}
+#doneRow .mini .st{font-size:clamp(.6rem,1vh,.8rem);margin:0;order:-1}
+body:not(.mode-add) .done-sec{padding:4px 8px 6px!important;border-radius:8px}
+body:not(.mode-add) .done-sec h3{font-size:clamp(.55rem,.9vh,.7rem)!important;margin:0 0 3px!important}
 button.mini.pick{font:inherit;text-align:left;border:0;cursor:pointer;width:100%;transition:transform .12s,filter .12s}
 button.mini.pick:hover{filter:brightness(1.12);transform:translateY(-2px)}
 .confirm-scrim{position:fixed;inset:0;z-index:38;background:rgba(10,15,25,.55);display:flex;align-items:center;justify-content:center;
@@ -583,7 +586,7 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
       const c = document.createElement("div"); c.className = "mini done";
       const tt = document.createElement("div"); tt.className = "t"; tt.textContent = fmt12(t.time);
       const nn = document.createElement("div"); nn.className = "n"; nn.textContent = t.title;
-      const st = document.createElement("div"); st.className = "st"; st.textContent = isDone(t) ? "✓ Completed" : "Not checked";
+      const st = document.createElement("div"); st.className = "st"; st.textContent = isDone(t) ? "✓" : "–"; c.title = isDone(t) ? "Completed" : "Not checked";
       c.append(tt, nn, st); drow.append(c);
     });
 
