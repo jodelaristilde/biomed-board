@@ -73,10 +73,11 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .mini.done{box-shadow:none;background:var(--comp-bg);color:var(--comp-ink)}
 .mini.done .t{color:var(--comp-time)}
 /* Completed & past: one slim row of small chips */
-#doneRow{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:8px;padding-bottom:3px;scrollbar-width:thin}
-#doneRow .mini{flex:none;display:flex;align-items:baseline;gap:8px;white-space:nowrap;padding:clamp(5px,.9vh,10px) clamp(12px,1.2vw,18px);border-radius:99px;max-width:340px}
+#doneRow{display:flex;flex-wrap:wrap;gap:8px}
+#doneRow .mini{flex:0 1 auto;display:flex;align-items:baseline;gap:8px;white-space:normal;padding:clamp(5px,.9vh,10px) clamp(12px,1.2vw,18px);border-radius:14px;max-width:100%}
 #doneRow .mini .t{font-size:clamp(.8rem,1.5vh,1.1rem)}
-#doneRow .mini .n{font-size:clamp(.9rem,1.7vh,1.25rem);font-weight:600;overflow:hidden;text-overflow:ellipsis;min-width:0}
+#doneRow .mini .n{font-size:clamp(.9rem,1.7vh,1.25rem);font-weight:600;overflow-wrap:anywhere;min-width:0}
+#doneRow .mini .t,#doneRow .mini .st{white-space:nowrap}
 #doneRow .mini .st{font-size:clamp(.85rem,1.6vh,1.2rem);margin:0;order:-1}
 body:not(.mode-add) .done-sec{padding:clamp(6px,1vh,12px) clamp(10px,1vw,14px)!important;border-radius:10px}
 body:not(.mode-add) .done-sec h3{font-size:clamp(.65rem,1.2vh,.9rem)!important;margin:0 0 6px!important}
