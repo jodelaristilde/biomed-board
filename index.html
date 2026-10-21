@@ -78,6 +78,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 #doneRow .mini .t{font-size:clamp(.8rem,1.5vh,1.1rem)}
 #doneRow .mini .n{font-size:clamp(.9rem,1.7vh,1.25rem);font-weight:600;overflow-wrap:anywhere;min-width:0}
 #doneRow .mini .t,#doneRow .mini .st{white-space:nowrap}
+#doneRow button.mini.reopen{font:inherit;border:0;cursor:pointer;text-align:left;transition:filter .12s}
+#doneRow button.mini.reopen:hover{filter:brightness(1.15)}
 #doneRow .mini .st{font-size:clamp(.85rem,1.6vh,1.2rem);margin:0;order:-1}
 body:not(.mode-add) .done-sec{padding:clamp(6px,1vh,12px) clamp(10px,1vw,14px)!important;border-radius:10px}
 body:not(.mode-add) .done-sec h3{font-size:clamp(.65rem,1.2vh,.9rem)!important;margin:0 0 6px!important}
@@ -302,7 +304,7 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
   <div class="confirm-box" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
     <p class="confirm-time" id="confirmTime"></p>
     <h2 id="confirmTitle"></h2>
-    <p class="confirm-q">Mark this task as complete now?</p>
+    <p class="confirm-q" id="confirmQ">Mark this task as complete now?</p>
     <div class="confirm-actions">
       <button type="button" class="confirm-yes" id="confirmYes">Complete</button>
       <button type="button" class="confirm-no" id="confirmNo">Cancel</button>
@@ -360,10 +362,21 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
     persist() { try { localStorage.setItem(LS, JSON.stringify(tasks)); } catch {} },
     async save(t) { const i = tasks.findIndex(x => x.id === t.id); if (i >= 0) tasks[i] = t; else tasks.push(t); this.persist(); render(true); },
     async remove(id) { tasks = tasks.filter(x => x.id !== id); this.persist(); render(true); },
-    async markDone(id, date) { this.persist(); }
+    async markDone(id, date) { this.persist(); },
+    async markUndone(id, date) { this.persist(); }
   };
 
   // Mark a task complete for one day (repeating tasks are completed per day).
+  // Reopen a task completed by mistake (for that day only).
+  async function markUndone(t, date) {
+    if (!t) return;
+    const local = tasks.find(x => x.id === t.id);
+    if (local) { local.done = { ...(local.done || {}), [date]: false }; }
+    render(true);
+    if (!store || !canWrite || !store.markUndone) return;
+    try { await store.markUndone(t.id, date); } catch { toast("Couldn't save. It may still show as completed on other screens."); }
+  }
+
   async function markDone(t, date) {
     if (!t) return;
     const local = tasks.find(x => x.id === t.id);
@@ -437,7 +450,8 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
       kind: "firebase",
       async save(t) { const { id, ...body } = t; await ref.child(id).set(body); },
       async remove(id) { await ref.child(id).remove(); },
-      async markDone(id, date) { await ref.child(id).child("done").child(date).set(true); }
+      async markDone(id, date) { await ref.child(id).child("done").child(date).set(true); },
+      async markUndone(id, date) { await ref.child(id).child("done").child(date).remove(); }
     };
     if (mode === "add") showAddPage();
     $("storeMsg").textContent = "Connecting to the shared task list…";
@@ -466,7 +480,8 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
       kind: "db",
       async save(t) { const { id, ...body } = t; await col.doc(id).set(body); },
       async remove(id) { await col.doc(id).delete(); },
-      async markDone(id, date) { await col.doc(id).update({ done: { [date]: true } }); }
+      async markDone(id, date) { await col.doc(id).update({ done: { [date]: true } }); },
+      async markUndone(id, date) { await col.doc(id).update({ done: { [date]: false } }); }
     };
     $("storeMsg").textContent = canWrite ? "Synced to your account. Open this page on any device." : "You can view this board but not change it.";
     if (!canWrite) { $("openAdd").hidden = true; }
@@ -587,7 +602,8 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
     const drow = $("doneRow"); drow.innerHTML = "";
     $("doneSec").hidden = !past.length;
     past.forEach(t => {
-      const c = document.createElement("div"); c.className = "mini done";
+      const c = document.createElement(isDone(t) ? "button" : "div"); c.className = "mini done";
+      if (isDone(t)) { c.type = "button"; c.classList.add("reopen"); c.setAttribute("aria-label", "Reopen: " + t.title); c.onclick = () => openConfirm(t, today, "reopen"); }
       const tt = document.createElement("div"); tt.className = "t"; tt.textContent = fmt12(t.time);
       const nn = document.createElement("div"); nn.className = "n"; nn.textContent = t.title;
       const st = document.createElement("div"); st.className = "st"; st.textContent = isDone(t) ? "✓" : "–"; c.title = isDone(t) ? "Completed" : "Not checked";
@@ -599,8 +615,11 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
 
   // ---------- complete a task early ----------
   let confirmTask = null, confirmDate = "";
-  function openConfirm(t, date) {
-    confirmTask = t; confirmDate = date;
+  let confirmMode = "complete";
+  function openConfirm(t, date, mode) {
+    confirmTask = t; confirmDate = date; confirmMode = mode || "complete";
+    $("confirmQ").textContent = confirmMode === "reopen" ? "Reopen this task? It goes back on the board as not done." : "Mark this task as complete now?";
+    $("confirmYes").textContent = confirmMode === "reopen" ? "Reopen" : "Complete";
     $("confirmTime").textContent = fmt12(t.time);
     $("confirmTitle").textContent = t.title;
     $("confirm").hidden = false; $("confirmYes").focus();
@@ -609,7 +628,9 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
   $("confirmYes").onclick = () => {
     const t = confirmTask, d = confirmDate;
     closeConfirm();
-    if (t) { markDone(t, d); toast("Marked complete"); }
+    if (!t) return;
+    if (confirmMode === "reopen") { markUndone(t, d); toast("Task reopened"); }
+    else { markDone(t, d); toast("Marked complete"); }
   };
   $("confirmNo").onclick = closeConfirm;
   $("confirm").addEventListener("click", e => { if (e.target === $("confirm")) closeConfirm(); });
