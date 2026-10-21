@@ -71,6 +71,18 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .mini{background:var(--up-bg);color:var(--up-ink);border-radius:8px;padding:12px 14px;box-shadow:var(--shadow);min-width:0}
 .mini .t{font-family:var(--f-mono);font-weight:600;font-size:.95rem;color:var(--up-time)}
 .mini.done{box-shadow:none}
+button.mini.pick{font:inherit;text-align:left;border:0;cursor:pointer;width:100%;transition:transform .12s,filter .12s}
+button.mini.pick:hover{filter:brightness(1.12);transform:translateY(-2px)}
+.confirm-scrim{position:fixed;inset:0;z-index:38;background:rgba(10,15,25,.55);display:flex;align-items:center;justify-content:center;
+  padding:calc(16px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.confirm-box{background:var(--panel);color:var(--panel-ink);border-radius:12px;padding:clamp(20px,3vh,36px);width:min(520px,100%);text-align:center;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:10px}
+.confirm-time{margin:0;font-family:var(--f-mono);font-weight:600;color:var(--up-bg)}
+.confirm-box h2{margin:0;font-family:var(--f-display);font-weight:800;font-size:clamp(1.5rem,4vh,2.4rem);line-height:1.1;overflow-wrap:anywhere}
+.confirm-q{margin:0;color:var(--muted)}
+.confirm-actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:8px}
+.confirm-actions button{font-size:1.1rem;padding:12px 28px}
+.confirm-yes{background:var(--card);color:var(--card-ink)}
+.confirm-no{background:transparent;color:var(--panel-ink);border:1px solid var(--panel-line)}
 .mini .st{font-size:.8rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-top:4px}
 .done-sec{margin-top:8px;background:var(--done-bg);border-radius:10px;padding:14px 16px 16px}
 .done-sec h3{color:var(--done-ink)}
@@ -275,6 +287,17 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
   <p>Only the board's owner can add or change tasks here.</p>
 </div>
 <div class="toast" id="toast" hidden></div>
+<div class="confirm-scrim" id="confirm" hidden>
+  <div class="confirm-box" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+    <p class="confirm-time" id="confirmTime"></p>
+    <h2 id="confirmTitle"></h2>
+    <p class="confirm-q">Mark this task as complete now?</p>
+    <div class="confirm-actions">
+      <button type="button" class="confirm-yes" id="confirmYes">Complete</button>
+      <button type="button" class="confirm-no" id="confirmNo">Cancel</button>
+    </div>
+  </div>
+</div>
 <div class="fs-hint" id="fsHint" hidden>Click anywhere for full screen</div>
 
 <div class="alert" id="alert" hidden role="alertdialog" aria-labelledby="alertTitle">
@@ -540,10 +563,12 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
       row.append(p);
     }
     rest.forEach(t => {
-      const c = document.createElement("div"); c.className = "mini";
+      const c = document.createElement("button"); c.type = "button"; c.className = "mini pick";
+      c.setAttribute("aria-label", "Complete early: " + t.title);
       const tt = document.createElement("div"); tt.className = "t"; tt.textContent = fmt12(t.time);
       const nn = document.createElement("div"); nn.className = "n"; nn.textContent = t.title;
       c.append(tt, nn); row.append(c);
+      c.onclick = () => openConfirm(t, today);
     });
 
     const drow = $("doneRow"); drow.innerHTML = "";
@@ -558,6 +583,24 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
 
     if (!$("drawer").hidden) renderDayList();
   }
+
+  // ---------- complete a task early ----------
+  let confirmTask = null, confirmDate = "";
+  function openConfirm(t, date) {
+    confirmTask = t; confirmDate = date;
+    $("confirmTime").textContent = fmt12(t.time);
+    $("confirmTitle").textContent = t.title;
+    $("confirm").hidden = false; $("confirmYes").focus();
+  }
+  function closeConfirm() { $("confirm").hidden = true; confirmTask = null; }
+  $("confirmYes").onclick = () => {
+    const t = confirmTask, d = confirmDate;
+    closeConfirm();
+    if (t) { markDone(t, d); toast("Marked complete"); }
+  };
+  $("confirmNo").onclick = closeConfirm;
+  $("confirm").addEventListener("click", e => { if (e.target === $("confirm")) closeConfirm(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("confirm").hidden) closeConfirm(); });
 
   // ---------- 5-minute heads-up ----------
   // Once shown, the alert stays (and keeps flashing) until someone taps "Got it".
