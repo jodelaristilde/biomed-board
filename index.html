@@ -11,9 +11,9 @@
 /* Layout: a desk surface with one oversized index card (the task now), and a row of small cards (later today) beneath it. */
 :root{
   --desk:#dfe5ee; --desk-ink:#1d2a3d; --muted:#5c6b80;
-  --card:#1f7a4d; --card-flash:#2fae6c; --card-deep:#16603b; --card-line:#2c8a5a; --card-rule:#ffd54a; --card-ink:#ffffff;
+  --card:#39ff14; --card-flash:#b6ff3b; --card-deep:#1fb800; --card-line:#2fe00f; --card-rule:#ffd54a; --card-ink:#06210a;
   --panel:#fbfdfb; --panel-ink:#18202c; --panel-line:#cfe0d6;
-  --up-bg:#2457c5; --up-ink:#ffffff; --up-time:#d3e1ff; --done-bg:#d3d7dd; --done-ink:#4a5260;
+  --up-bg:#2457c5; --up-ink:#ffffff; --up-time:#d3e1ff; --comp-bg:#7a3fd1; --comp-ink:#ffffff; --comp-time:#e6dbff; --done-bg:#d3d7dd; --done-ink:#4a5260;
   --accent:#2457c5; --accent-ink:#ffffff; --chip:#eef4f0; --danger:#b3322e;
   --shadow:0 1px 0 rgba(20,30,50,.06),0 12px 30px -12px rgba(20,30,50,.35);
   --f-display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
@@ -22,16 +22,16 @@
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --desk:#111824; --desk-ink:#e6ebf3; --muted:#93a1b6;
-  --card:#17663f; --card-flash:#23935a; --card-deep:#0f4a2d; --card-line:#21774c; --card-rule:#ffd54a; --card-ink:#f2fff6;
+  --card:#39ff14; --card-flash:#b6ff3b; --card-deep:#1fb800; --card-line:#2fe00f; --card-rule:#ffd54a; --card-ink:#06210a;
   --panel:#1c2534; --panel-ink:#f1f4f9; --panel-line:#2f3d52;
-  --up-bg:#2f62d6; --up-ink:#ffffff; --up-time:#cddcff; --done-bg:#2b313b; --done-ink:#a7b0bd;
+  --up-bg:#2f62d6; --up-ink:#ffffff; --up-time:#cddcff; --comp-bg:#7a3fd1; --comp-ink:#ffffff; --comp-time:#e6dbff; --done-bg:#2b313b; --done-ink:#a7b0bd;
   --accent:#7aa2ff; --accent-ink:#0b1220; --chip:#243045; --danger:#ff8a84;
   --shadow:0 1px 0 rgba(0,0,0,.3),0 14px 34px -14px rgba(0,0,0,.8); color-scheme:dark}}
 :root[data-theme="dark"]{
   --desk:#111824; --desk-ink:#e6ebf3; --muted:#93a1b6;
-  --card:#17663f; --card-flash:#23935a; --card-deep:#0f4a2d; --card-line:#21774c; --card-rule:#ffd54a; --card-ink:#f2fff6;
+  --card:#39ff14; --card-flash:#b6ff3b; --card-deep:#1fb800; --card-line:#2fe00f; --card-rule:#ffd54a; --card-ink:#06210a;
   --panel:#1c2534; --panel-ink:#f1f4f9; --panel-line:#2f3d52;
-  --up-bg:#2f62d6; --up-ink:#ffffff; --up-time:#cddcff; --done-bg:#2b313b; --done-ink:#a7b0bd;
+  --up-bg:#2f62d6; --up-ink:#ffffff; --up-time:#cddcff; --comp-bg:#7a3fd1; --comp-ink:#ffffff; --comp-time:#e6dbff; --done-bg:#2b313b; --done-ink:#a7b0bd;
   --accent:#7aa2ff; --accent-ink:#0b1220; --chip:#243045; --danger:#ff8a84;
   --shadow:0 1px 0 rgba(0,0,0,.3),0 14px 34px -14px rgba(0,0,0,.8); color-scheme:dark}
 *{box-sizing:border-box}
@@ -70,7 +70,13 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .mini-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
 .mini{background:var(--up-bg);color:var(--up-ink);border-radius:8px;padding:12px 14px;box-shadow:var(--shadow);min-width:0}
 .mini .t{font-family:var(--f-mono);font-weight:600;font-size:.95rem;color:var(--up-time)}
-.mini.done{box-shadow:none}
+.mini.done{box-shadow:none;background:var(--comp-bg);color:var(--comp-ink)}
+.mini.done .t{color:var(--comp-time)}
+#doneRow{grid-template-columns:repeat(auto-fill,minmax(clamp(100px,9vw,170px),1fr));gap:clamp(4px,.8vh,10px)}
+#doneRow .mini{padding:clamp(4px,.7vh,10px) clamp(8px,.8vw,12px);border-radius:6px}
+#doneRow .mini .t{font-size:clamp(.65rem,1.2vh,.95rem)}
+#doneRow .mini .n{font-size:clamp(.75rem,1.5vh,1.1rem)}
+#doneRow .mini .st{font-size:clamp(.55rem,1vh,.8rem);margin-top:2px}
 button.mini.pick{font:inherit;text-align:left;border:0;cursor:pointer;width:100%;transition:transform .12s,filter .12s}
 button.mini.pick:hover{filter:brightness(1.12);transform:translateY(-2px)}
 .confirm-scrim{position:fixed;inset:0;z-index:38;background:rgba(10,15,25,.55);display:flex;align-items:center;justify-content:center;
