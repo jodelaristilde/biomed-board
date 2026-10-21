@@ -90,6 +90,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 form{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 label{display:flex;flex-direction:column;gap:4px;font-size:.85rem;font-weight:700;min-width:0}
 label.full{grid-column:1/-1}
+.field{display:flex;flex-direction:column;gap:4px;font-size:.85rem;font-weight:700;min-width:0}
+.timewrap{display:flex;gap:10px;align-items:center}
+.timewrap input[type="time"]{flex:1}
+.nowchk{flex-direction:row;align-items:center;gap:6px;white-space:nowrap;font-size:1rem;cursor:pointer}
+.nowchk input{width:20px;height:20px;padding:0;margin:0;accent-color:var(--accent)}
+input:disabled{opacity:.55}
 input,select,textarea{font:inherit;font-weight:400;padding:9px 10px;border-radius:6px;border:1px solid var(--card-line);background:var(--desk);color:var(--desk-ink);min-width:0;width:100%}
 textarea{resize:vertical;min-height:60px}
 .form-actions{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap}
@@ -219,7 +225,13 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
     <input type="hidden" id="f-id">
     <label class="full">Task<input id="f-title" required maxlength="120" placeholder="e.g. Team standup"></label>
     <label>Date<input id="f-date" type="date" required></label>
-    <label>Time<input id="f-time" type="time" required></label>
+    <div class="field">
+      <label for="f-time">Time</label>
+      <div class="timewrap">
+        <input id="f-time" type="time" required>
+        <label class="nowchk"><input type="checkbox" id="f-now"> Now</label>
+      </div>
+    </div>
     <label class="full">Repeats
       <select id="f-repeat">
         <option value="none">Just this day</option>
@@ -615,7 +627,11 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
   }
 
   // ---------- form ----------
+  function setNow() { const n = new Date(); $("f-date").value = ymd(n); $("f-time").value = pad(n.getHours()) + ":" + pad(n.getMinutes()); }
+  function setNowMode(on) { $("f-now").checked = on; $("f-time").disabled = on; $("f-date").disabled = on; if (on) setNow(); }
+  $("f-now").addEventListener("change", () => setNowMode($("f-now").checked));
   function resetForm(dateStr) {
+    setNowMode(false);
     $("f-id").value = ""; $("f-title").value = ""; $("f-note").value = ""; $("f-repeat").value = "none";
     $("f-date").value = dateStr || $("listDate").value || ymd(new Date());
     const n = new Date(Date.now() + 15 * 60000);
@@ -623,6 +639,7 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
     $("drawerH").textContent = "Add a task"; $("saveBtn").textContent = "Save task"; $("formMsg").textContent = "";
   }
   function fillForm(t) {
+    setNowMode(false);
     $("f-id").value = t.id; $("f-title").value = t.title; $("f-date").value = t.date; $("f-time").value = t.time;
     $("f-repeat").value = t.repeat || "none"; $("f-note").value = t.note || "";
     $("drawerH").textContent = "Edit task"; $("saveBtn").textContent = "Update task"; $("f-title").focus();
@@ -636,6 +653,7 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
   $("taskForm").addEventListener("submit", async e => {
     e.preventDefault();
     if (!store) return;
+    if ($("f-now").checked) setNow();
     const t = {
       id: $("f-id").value || ("t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)),
       title: $("f-title").value.trim(), date: $("f-date").value, time: $("f-time").value,
