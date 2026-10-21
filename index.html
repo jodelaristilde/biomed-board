@@ -142,7 +142,7 @@ textarea{resize:vertical;min-height:60px}
 /* 5-minute heads-up: full-screen flashing card */
 .alert{position:fixed;inset:0;z-index:40;background:var(--card);color:var(--card-ink);overflow-y:auto;display:flex;
   padding:calc(24px + env(safe-area-inset-top,0px)) max(20px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) max(20px,env(safe-area-inset-left,0px));
-  animation:pulse .8s steps(1,end) infinite}
+  animation:pulse 2s steps(1,end) infinite}
 /* Hard on/off flash: fluorescent green and bright white */
 @keyframes pulse{0%{background:var(--card)}50%{background:#ffffff}100%{background:var(--card)}}
 .alert.switch .alert-main{animation:pop .45s ease-out}
