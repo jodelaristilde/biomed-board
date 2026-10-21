@@ -142,8 +142,11 @@ textarea{resize:vertical;min-height:60px}
 /* 5-minute heads-up: full-screen flashing card */
 .alert{position:fixed;inset:0;z-index:40;background:var(--card);color:var(--card-ink);overflow-y:auto;display:flex;
   padding:calc(24px + env(safe-area-inset-top,0px)) max(20px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) max(20px,env(safe-area-inset-left,0px));
-  animation:pulse 1.2s ease-in-out infinite}
-@keyframes pulse{0%,100%{background:var(--card)}50%{background:var(--card-flash)}}
+  animation:pulse .8s steps(1,end) infinite}
+/* Hard on/off flash: fluorescent green and bright white */
+@keyframes pulse{0%{background:var(--card)}50%{background:#ffffff}100%{background:var(--card)}}
+.alert.switch .alert-main{animation:pop .45s ease-out}
+@keyframes pop{0%{transform:scale(.92);opacity:.3}100%{transform:none;opacity:1}}
 .alert-inner{flex:1;margin:0 auto;width:100%;max-width:1100px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:20px}
 .alert .alert-main{margin-block:auto;display:flex;flex-direction:column;align-items:center;gap:20px}
 .alert .later-block{padding-top:32px}
@@ -683,6 +686,7 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
     });
     if (!$("drawer").hidden) closeDrawer();
     el.hidden = false;
+    el.classList.remove("switch"); void el.offsetWidth; el.classList.add("switch");
   }
   $("alertDismiss").onclick = () => {
     const t = alertTask, d = alertDate;
