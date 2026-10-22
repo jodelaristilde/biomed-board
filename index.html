@@ -130,6 +130,7 @@ textarea{resize:vertical;min-height:60px}
 .list li{display:grid;grid-template-columns:64px 1fr auto;gap:10px;align-items:center;padding:8px 10px;background:var(--chip);border-radius:6px}
 .list .lt{font-family:var(--f-mono);font-weight:600;font-variant-numeric:tabular-nums}
 .list .ln{min-width:0;overflow-wrap:anywhere}
+.list .ln small.doneat{color:#1c9a4a;font-weight:700}
 .list .ln small{display:block;color:color-mix(in srgb,var(--card-ink) 60%,transparent)}
 .list .lb{display:flex;gap:4px}
 .list button{padding:4px 8px;font-size:.8rem;background:transparent;border:1px solid var(--card-line);color:var(--card-ink)}
@@ -398,10 +399,12 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
   async function markDone(t, date) {
     if (!t) return;
     const local = tasks.find(x => x.id === t.id);
-    if (local) { local.done = { ...(local.done || {}), [date]: true }; }
+    // Record the clock time it was completed (e.g. "10:42"), shown in the PIN-protected list.
+    const n = new Date(), at = pad(n.getHours()) + ":" + pad(n.getMinutes());
+    if (local) { local.done = { ...(local.done || {}), [date]: at }; }
     render(true);
     if (!store || !canWrite) return;
-    try { await store.markDone(t.id, date); } catch { toast("Couldn't save. It will show as not done on other screens."); }
+    try { await store.markDone(t.id, date, at); } catch { toast("Couldn't save. It will show as not done on other screens."); }
   }
 
   function useLocal(note) {
@@ -468,7 +471,7 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
       kind: "firebase",
       async save(t) { const { id, ...body } = t; await ref.child(id).set(body); },
       async remove(id) { await ref.child(id).remove(); },
-      async markDone(id, date) { await ref.child(id).child("done").child(date).set(true); },
+      async markDone(id, date, at) { await ref.child(id).child("done").child(date).set(at || true); },
       async markUndone(id, date) { await ref.child(id).child("done").child(date).remove(); }
     };
     if (mode === "add") showAddPage();
@@ -498,7 +501,7 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
       kind: "db",
       async save(t) { const { id, ...body } = t; await col.doc(id).set(body); },
       async remove(id) { await col.doc(id).delete(); },
-      async markDone(id, date) { await col.doc(id).update({ done: { [date]: true } }); },
+      async markDone(id, date, at) { await col.doc(id).update({ done: { [date]: at || true } }); },
       async markUndone(id, date) { await col.doc(id).update({ done: { [date]: false } }); }
     };
     $("storeMsg").textContent = canWrite ? "Synced to your account. Open this page on any device." : "You can view this board but not change it.";
@@ -758,6 +761,12 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
       const ln = document.createElement("span"); ln.className = "ln"; ln.textContent = t.title;
       const meta = [t.repeat === "daily" ? "Every day" : t.repeat === "weekdays" ? "Weekdays" : "", t.note || ""].filter(Boolean).join(" · ");
       if (meta) { const s = document.createElement("small"); s.textContent = meta; ln.append(s); }
+      const doneAt = t.done && t.done[d];
+      if (doneAt) {
+        const c = document.createElement("small"); c.className = "doneat";
+        c.textContent = typeof doneAt === "string" && /^\d{2}:\d{2}$/.test(doneAt) ? "✓ Completed at " + fmt12(doneAt) : "✓ Completed";
+        ln.append(c);
+      }
       const lb = document.createElement("span"); lb.className = "lb";
       if (canWrite) {
         const e = document.createElement("button"); e.type = "button"; e.textContent = "Edit"; e.onclick = () => fillForm(t);
