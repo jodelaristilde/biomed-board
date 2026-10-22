@@ -145,6 +145,12 @@ textarea{resize:vertical;min-height:60px}
   animation:pulse 1.2s ease-in-out infinite}
 /* Smooth fade between fluorescent green and lime */
 @keyframes pulse{0%,100%{background:var(--card)}50%{background:var(--card-flash)}}
+/* 10-minute warning: steady yellow */
+.alert.warn{animation:none;background:#ffff00;color:#2a2200}
+.alert.warn .alert-dismiss{background:#2a2200!important;color:#ffff00!important}
+.alert.warn .alert-of{background:#2a2200;color:#ffff00}
+.alert.warn h3{color:#2a2200}
+.alert-warn{margin:0;font-family:var(--f-mono);font-weight:700;font-size:clamp(1rem,2.6vh,1.8rem);background:#2a2200;color:#ffff00;padding:6px 18px;border-radius:99px}
 .alert.switch .alert-main{animation:pop .45s ease-out}
 @keyframes pop{0%{transform:scale(.92);opacity:.3}100%{transform:none;opacity:1}}
 .alert-inner{flex:1;margin:0 auto;width:100%;max-width:1100px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:20px}
@@ -207,6 +213,12 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
 .locked h2{font-family:var(--f-display);font-weight:800;margin:0 0 8px}
 .locked p{margin:0;color:var(--muted)}
 .fs-hint{position:fixed;left:50%;transform:translateX(-50%);top:calc(16px + env(safe-area-inset-top,0px));z-index:35;background:var(--desk-ink);color:var(--desk);padding:10px 18px;border-radius:99px;font-weight:700;cursor:pointer;box-shadow:var(--shadow)}
+/* Got it sits lower, notes and date bold, task names sized to fit */
+.flash .gotit{margin-top:clamp(16px,5vh,64px)}
+.alert-dismiss{margin-top:clamp(20px,6vh,80px)}
+.flash .note,.alert .note{font-weight:700}
+.bigdate{font-weight:800}
+.flash h2,.alert h2{overflow-wrap:normal;word-break:normal;max-width:100%}
 </style>
 </head>
 <body>
@@ -324,6 +336,7 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
       <span id="alertTime"></span>
     </div>
     <div class="alert-main">
+      <p class="alert-warn" id="alertWarn" hidden></p>
       <p class="alert-of" id="alertOf" hidden></p>
       <h2 id="alertTitle"></h2>
       <p class="note" id="alertNote"></p>
@@ -581,6 +594,7 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
       flash.append(b);
     }
     if (foot.childNodes.length) flash.append(foot);
+    if (current) requestAnimationFrame(fitAll);
 
     if (current && prevCur !== undefined && prevCur !== String(current.id) && lastKey) {
       flash.classList.remove("flip"); void flash.offsetWidth; flash.classList.add("flip");
@@ -618,6 +632,24 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
     if (!$("drawer").hidden) renderDayList();
   }
 
+  // ---------- shrink a task name until it fits the screen ----------
+  function fitText(el, maxPx, maxH) {
+    if (!el || !el.isConnected || !el.textContent) return;
+    let size = Math.max(18, Math.floor(maxPx));
+    el.style.setProperty("font-size", size + "px", "important");
+    while (size > 18 && (el.scrollWidth > el.clientWidth + 1 || el.offsetHeight > maxH)) {
+      size -= 2;
+      el.style.setProperty("font-size", size + "px", "important");
+    }
+  }
+  function fitAll() {
+    const w = window.innerWidth, h = window.innerHeight;
+    const card = document.querySelector("#flash h2");
+    if (card) fitText(card, Math.min(w * 0.11, h * 0.18), $("flash").clientHeight * 0.5);
+    if (!$("alert").hidden) fitText($("alertTitle"), Math.min(w * 0.12, h * 0.2), h * 0.42);
+  }
+  window.addEventListener("resize", () => requestAnimationFrame(fitAll));
+
   // ---------- complete a task early ----------
   let confirmTask = null, confirmDate = "";
   let confirmMode = "complete";
@@ -646,10 +678,14 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
   // flashing screen. With more than one, they take turns, 5 seconds each.
   let alertKey = "", alertTask = null, alertIdx = 0, alertSwitchAt = 0, alertDate = "";
   const alertSeen = new Set();
+  const warnAck = new Set();
+  let alertStage = "go";
   function updateAlert(today, list, nowSec, nowMin) {
     const el = $("alert");
     if (mode === "add") return;
-    const pending = list.filter(t => mins(t.time) * 60 - nowSec <= 300);
+    const left = t => mins(t.time) * 60 - nowSec;
+    // 10 to 5 minutes before: yellow warning (OK hides it). Last 5 minutes and after: green flash until Got it.
+    const pending = list.filter(t => left(t) <= 300 || (left(t) <= 600 && !warnAck.has(today + "|" + t.id)));
     if (!pending.length) {
       alertTask = null; alertKey = ""; alertIdx = 0; alertSwitchAt = 0;
       if (!el.hidden) el.hidden = true;
@@ -662,19 +698,25 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
     alertDate = today;
     let fresh = false;
     pending.forEach(p => { const k = today + "|" + p.id; if (!alertSeen.has(k)) { alertSeen.add(k); fresh = true; } });
-    const key = [today, t.id, t.time, t.title, t.note, alertIdx, pending.length].join("|");
-    if (key !== alertKey) showAlert(t, key, list, nowMin, alertIdx, pending.length);
+    const stage = left(t) > 300 ? "warn" : "go";
+    alertStage = stage;
+    const key = [today, t.id, t.time, t.title, t.note, alertIdx, pending.length, stage].join("|");
+    if (key !== alertKey) showAlert(t, key, list, nowMin, alertIdx, pending.length, stage);
+    if (stage === "warn") { const m = Math.ceil(left(t) / 60); $("alertWarn").textContent = "Heads up · starts in " + m + " min"; }
     if (fresh && soundOn) chime();
   }
-  function showAlert(t, key, list, nowMin, idx, count) {
+  function showAlert(t, key, list, nowMin, idx, count, stage) {
     const el = $("alert");
+    el.classList.toggle("warn", stage === "warn");
+    $("alertWarn").hidden = stage !== "warn";
+    $("alertDismiss").textContent = stage === "warn" ? "OK" : "Got it";
     alertKey = key; alertTask = t;
     $("alertTitle").textContent = t.title;
     $("alertTime").textContent = "at " + fmt12(t.time);
     $("alertNote").textContent = t.note || "";
     $("alertNote").hidden = !t.note;
     $("alertOf").hidden = count < 2;
-    $("alertOf").textContent = (idx + 1) + " of " + count + " waiting for Got it";
+    $("alertOf").textContent = (idx + 1) + " of " + count + " alerts";
     const row = $("alertLater"); row.innerHTML = "";
     const rest = list.filter(x => mins(x.time) > mins(t.time));
     if (!rest.length) { const p = document.createElement("p"); p.className = "none"; p.textContent = "Nothing else after this today."; row.append(p); }
@@ -687,9 +729,17 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
     if (!$("drawer").hidden) closeDrawer();
     el.hidden = false;
     el.classList.remove("switch"); void el.offsetWidth; el.classList.add("switch");
+    requestAnimationFrame(fitAll);
   }
   $("alertDismiss").onclick = () => {
     const t = alertTask, d = alertDate;
+    if (alertStage === "warn") {
+      // Acknowledge the yellow warning only; the green flash still comes at 5 minutes.
+      if (t) warnAck.add(d + "|" + t.id);
+      alertKey = ""; alertTask = null; alertSwitchAt = 0;
+      render(true);
+      return;
+    }
     alertKey = ""; alertTask = null;
     alertSwitchAt = Date.now() + 5000; // give the next one its full 5 seconds
     if (t) markDone(t, d);
