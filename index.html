@@ -649,7 +649,7 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
     });
 
     const drow = $("doneRow"); drow.innerHTML = "";
-    $("doneSec").hidden = !past.length;
+    $("doneSec").hidden = true; // Completed & past is hidden on the board
     past.forEach(t => {
       const c = document.createElement(isDone(t) ? "button" : "div"); c.className = "mini done";
       if (isDone(t)) { c.type = "button"; c.classList.add("reopen"); c.setAttribute("aria-label", "Reopen: " + t.title); c.onclick = () => openConfirm(t, today, "reopen"); }
