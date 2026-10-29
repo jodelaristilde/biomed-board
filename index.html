@@ -85,6 +85,19 @@ body:not(.mode-add) .done-sec{padding:clamp(6px,1vh,12px) clamp(10px,1vw,14px)!i
 body:not(.mode-add) .done-sec h3{font-size:clamp(.65rem,1.2vh,.9rem)!important;margin:0 0 6px!important}
 button.mini.pick{font:inherit;text-align:left;border:0;cursor:pointer;width:100%;transition:transform .12s,filter .12s}
 button.mini.pick:hover{filter:brightness(1.12);transform:translateY(-2px)}
+.sign-scrim{position:fixed;inset:0;z-index:39;background:rgba(10,15,25,.6);display:flex;align-items:center;justify-content:center;
+  padding:calc(16px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.sign-box{background:var(--panel);color:var(--panel-ink);border-radius:14px;padding:clamp(20px,3vh,32px);width:min(560px,100%);display:flex;flex-direction:column;gap:12px;text-align:center;box-shadow:var(--shadow)}
+.sign-box h2{margin:0;font-family:var(--f-display);font-weight:800;font-size:clamp(1.4rem,3.5vh,2rem)}
+.sign-sub{margin:0;color:var(--muted)}
+.sign-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:6px}
+.sign-grid button{color:#fff;font-size:1.25rem;font-weight:800;padding:18px 10px;border-radius:12px;border:0;box-shadow:0 4px 0 rgba(0,0,0,.18)}
+.sign-grid button:hover{filter:brightness(1.1)}
+.sign-grid button:active{transform:translateY(2px);box-shadow:0 2px 0 rgba(0,0,0,.18)}
+.sign-cancel{align-self:center;background:transparent;color:var(--panel-ink);border:1px solid var(--panel-line);margin-top:4px}
+.signed{display:inline-flex;align-items:center;gap:6px;color:#fff;font-weight:800;border-radius:99px;padding:3px 12px;font-size:clamp(.8rem,1.6vh,1.2rem);width:max-content;max-width:100%}
+.mini .signed{font-size:.7rem;padding:1px 8px;margin-top:4px}
+.list .ln small.signedby{font-weight:700}
 .confirm-scrim{position:fixed;inset:0;z-index:38;background:rgba(10,15,25,.55);display:flex;align-items:center;justify-content:center;
   padding:calc(16px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
 .confirm-box{background:var(--panel);color:var(--panel-ink);border-radius:12px;padding:clamp(20px,3vh,36px);width:min(520px,100%);text-align:center;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:10px}
@@ -317,6 +330,14 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
   <p>Only the board's owner can add or change tasks here.</p>
 </div>
 <div class="toast" id="toast" hidden></div>
+<div class="sign-scrim" id="signBox" hidden>
+  <div class="sign-box" role="dialog" aria-modal="true" aria-labelledby="signTitle">
+    <h2 id="signTitle">Who is posting this task?</h2>
+    <p class="sign-sub">Tap your name to sign and save.</p>
+    <div class="sign-grid" id="signGrid"></div>
+    <button type="button" class="sign-cancel" id="signCancel">Cancel</button>
+  </div>
+</div>
 <div class="confirm-scrim" id="confirm" hidden>
   <div class="confirm-box" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
     <p class="confirm-time" id="confirmTime"></p>
@@ -341,6 +362,7 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
       <p class="alert-of" id="alertOf" hidden></p>
       <h2 id="alertTitle"></h2>
       <p class="note" id="alertNote"></p>
+      <div id="alertSigned"></div>
       <button class="alert-dismiss" id="alertDismiss" type="button">Got it</button>
     </div>
     <div class="later-block">
@@ -591,6 +613,7 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
     }
     if (current) flash.append(h2);
     if (note.textContent) flash.append(note);
+    if (current && current.signedBy) flash.append(signedChip(current.signedBy));
     if (current) {
       const b = document.createElement("button"); b.type = "button"; b.className = "gotit"; b.textContent = "Got it";
       b.onclick = () => markDone(current, today);
@@ -617,7 +640,7 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
       c.setAttribute("aria-label", "Complete early: " + t.title);
       const tt = document.createElement("div"); tt.className = "t"; tt.textContent = fmt12(t.time);
       const nn = document.createElement("div"); nn.className = "n"; nn.textContent = t.title;
-      c.append(tt, nn); row.append(c);
+      c.append(tt, nn); if (t.signedBy) c.append(signedChip(t.signedBy)); row.append(c);
       c.onclick = () => openConfirm(t, today);
     });
 
@@ -721,6 +744,7 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
     $("alertTime").textContent = "at " + fmt12(t.time);
     $("alertNote").textContent = t.note || "";
     $("alertNote").hidden = !t.note;
+    $("alertSigned").innerHTML = ""; if (t.signedBy) $("alertSigned").append(signedChip(t.signedBy));
     $("alertOf").hidden = count < 2;
     $("alertOf").textContent = (idx + 1) + " of " + count + " alerts";
     const row = $("alertLater"); row.innerHTML = "";
@@ -764,6 +788,7 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
       const ln = document.createElement("span"); ln.className = "ln"; ln.textContent = t.title;
       const meta = [t.repeat === "daily" ? "Every day" : t.repeat === "weekdays" ? "Weekdays" : "", t.note || ""].filter(Boolean).join(" · ");
       if (meta) { const s = document.createElement("small"); s.textContent = meta; ln.append(s); }
+      if (t.signedBy) { const sb = document.createElement("small"); sb.className = "signedby"; sb.style.color = signerColor(t.signedBy); sb.textContent = "Posted by " + t.signedBy; ln.append(sb); }
       const doneAt = t.done && t.done[d];
       if (doneAt) {
         const c = document.createElement("small"); c.className = "doneat";
@@ -808,6 +833,36 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
   }
   function closeDrawer() { if (mode === "add") return; $("scrim").hidden = true; $("drawer").hidden = true; $("openAdd").focus(); }
 
+  // ---------- required signature ----------
+  const SIGNERS = [
+    { name: "Jodel",  color: "#2457c5" },
+    { name: "Alican", color: "#d1347a" },
+    { name: "Keith",  color: "#d96a00" },
+    { name: "Marco",  color: "#7a3fd1" },
+    { name: "Justin", color: "#0b8a8a" }
+  ];
+  const signerColor = n => (SIGNERS.find(x => x.name === n) || {}).color || "#444";
+  function signedChip(name) {
+    const el = document.createElement("span"); el.className = "signed";
+    el.style.background = signerColor(name); el.textContent = "Posted by " + name;
+    return el;
+  }
+  let signResolve = null;
+  function askSignature() {
+    return new Promise(res => {
+      signResolve = res;
+      const g = $("signGrid"); g.innerHTML = "";
+      SIGNERS.forEach(sg => {
+        const b = document.createElement("button"); b.type = "button"; b.textContent = sg.name; b.style.background = sg.color;
+        b.onclick = () => { $("signBox").hidden = true; const r = signResolve; signResolve = null; r && r(sg.name); };
+        g.append(b);
+      });
+      $("signBox").hidden = false; g.querySelector("button").focus();
+    });
+  }
+  $("signCancel").onclick = () => { $("signBox").hidden = true; const r = signResolve; signResolve = null; r && r(null); };
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("signBox").hidden) $("signCancel").click(); });
+
   $("taskForm").addEventListener("submit", async e => {
     e.preventDefault();
     if (!store) return;
@@ -820,10 +875,14 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
     };
     if (!t.title || !t.date || !t.time) { $("formMsg").className = "msg err"; $("formMsg").textContent = "Add a task name, date and time."; return; }
     const editing = !!$("f-id").value;
+    const signer = await askSignature();
+    if (!signer) { $("formMsg").className = "msg err"; $("formMsg").textContent = "Not saved. Pick your name to sign the task."; return; }
+    t.signedBy = signer;
+    $("formMsg").textContent = "";
     $("saveBtn").disabled = true;
     try {
       await store.save(t);
-      toast(editing ? "Task updated" : "Task added");
+      toast((editing ? "Task updated" : "Task added") + " · signed by " + t.signedBy);
       $("listDate").value = t.date;
       resetForm(t.date); renderDayList();
     } catch (err) {
