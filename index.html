@@ -98,9 +98,10 @@ button.mini.pick:hover{filter:brightness(1.12);transform:translateY(-2px)}
 .signed{display:inline-flex;align-items:center;gap:6px;color:#fff;font-weight:800;border-radius:99px;padding:3px 12px;font-size:clamp(.8rem,1.6vh,1.2rem);width:max-content;max-width:100%}
 .mini .signed{font-size:.7rem;padding:1px 8px;margin-top:4px}
 /* Signature on the green card and the alert: bottom-right corner, a bit bigger */
-#flash > .signed{position:absolute;right:clamp(12px,2vw,28px);bottom:clamp(12px,2vh,28px);font-size:clamp(1rem,2.6vh,2rem);padding:.35em 1em;box-shadow:0 3px 10px rgba(0,0,0,.25)}
-#alertSigned{position:fixed;right:max(20px,env(safe-area-inset-right,0px));bottom:calc(20px + env(safe-area-inset-bottom,0px));width:auto!important;z-index:2}
-#alertSigned .signed{font-size:clamp(1.1rem,3vh,2.2rem);padding:.35em 1em;box-shadow:0 3px 10px rgba(0,0,0,.25)}
+#flash > .signed{position:absolute;left:clamp(10px,1.4vw,22px);top:clamp(4px,.8vh,12px);font-size:clamp(1rem,2.4vh,1.8rem);font-weight:400;padding:0;background:none!important;color:var(--who);box-shadow:none}
+#alertSigned{position:fixed;left:max(20px,env(safe-area-inset-left,0px));top:calc(10px + env(safe-area-inset-top,0px));width:auto!important;z-index:2}
+#alertSigned .signed{font-size:clamp(1.1rem,2.8vh,2rem);font-weight:400;padding:0;background:none!important;color:var(--who);box-shadow:none}
+.alert.late #alertSigned .signed{color:#fff}
 .list .ln small.signedby{font-weight:700}
 .confirm-scrim{position:fixed;inset:0;z-index:38;background:rgba(10,15,25,.55);display:flex;align-items:center;justify-content:center;
   padding:calc(16px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
@@ -164,11 +165,18 @@ textarea{resize:vertical;min-height:60px}
 /* Smooth fade between fluorescent green and lime */
 @keyframes pulse{0%,100%{background:var(--card)}50%{background:var(--card-flash)}}
 /* 10-minute warning: steady yellow */
-.alert.warn{animation:none;background:#ffff00;color:#2a2200}
+.alert.warn{animation:pulse-y 1.2s ease-in-out infinite;background:#ffff00;color:#2a2200}
+@keyframes pulse-y{0%,100%{background:#ffff00}50%{background:#fff59a}}
+.alert.late{animation:pulse-r 1.2s ease-in-out infinite;background:#e3161b;color:#fff}
+@keyframes pulse-r{0%,100%{background:#e3161b}50%{background:#ff6a6a}}
+.alert.late .alert-dismiss{background:#fff!important;color:#e3161b!important}
+.alert.late .alert-of,.alert.late .alert-warn{background:#fff;color:#e3161b}
+.alert.late h3,.alert.late .note{color:#fff}
 .alert.warn .alert-dismiss{background:#2a2200!important;color:#ffff00!important}
 .alert.warn .alert-of{background:#2a2200;color:#ffff00}
 .alert.warn h3{color:#2a2200}
-.alert-warn{margin:0;font-family:var(--f-mono);font-weight:700;font-size:clamp(1rem,2.6vh,1.8rem);background:#2a2200;color:#ffff00;padding:6px 18px;border-radius:99px}
+.alert-warn{margin:0;font-family:var(--f-mono);font-weight:700;font-size:clamp(1rem,2.6vh,1.8rem);background:var(--card-ink);color:var(--card);padding:6px 18px;border-radius:99px}
+.alert.warn .alert-warn{background:#2a2200;color:#ffff00}
 .alert.switch .alert-main{animation:pop .45s ease-out}
 @keyframes pop{0%{transform:scale(.92);opacity:.3}100%{transform:none;opacity:1}}
 .alert-inner{flex:1;margin:0 auto;width:100%;max-width:1100px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:20px}
@@ -718,7 +726,7 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
     if (mode === "add") return;
     const left = t => mins(t.time) * 60 - nowSec;
     // 10 to 5 minutes before: yellow warning (OK hides it). Last 5 minutes and after: green flash until Got it.
-    const pending = list.filter(t => left(t) <= 300 || (left(t) <= 600 && !warnAck.has(today + "|" + t.id)));
+    const pending = list.filter(t => left(t) <= 300 || (left(t) <= 900 && !warnAck.has(today + "|" + t.id)));
     if (!pending.length) {
       alertTask = null; alertKey = ""; alertIdx = 0; alertSwitchAt = 0;
       if (!el.hidden) el.hidden = true;
@@ -731,17 +739,21 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
     alertDate = today;
     let fresh = false;
     pending.forEach(p => { const k = today + "|" + p.id; if (!alertSeen.has(k)) { alertSeen.add(k); fresh = true; } });
-    const stage = left(t) > 300 ? "warn" : "go";
+    const stage = left(t) > 300 ? "warn" : left(t) > 0 ? "go" : "late";
     alertStage = stage;
     const key = [today, t.id, t.time, t.title, t.note, alertIdx, pending.length, stage].join("|");
     if (key !== alertKey) showAlert(t, key, list, nowMin, alertIdx, pending.length, stage);
-    if (stage === "warn") { const m = Math.ceil(left(t) / 60); $("alertWarn").textContent = "Heads up · starts in " + m + " min"; }
+    { const L = left(t);
+      $("alertWarn").textContent = stage === "warn" ? "Coming up in " + Math.ceil(L / 60) + " min"
+        : stage === "go" ? "Starting in " + Math.ceil(L / 60) + " min"
+        : (Math.floor(-L / 60) < 1 ? "Past due · just now" : "Past due · " + Math.floor(-L / 60) + " min late"); }
     if (fresh && soundOn) chime();
   }
   function showAlert(t, key, list, nowMin, idx, count, stage) {
     const el = $("alert");
     el.classList.toggle("warn", stage === "warn");
-    $("alertWarn").hidden = stage !== "warn";
+    el.classList.toggle("late", stage === "late");
+    $("alertWarn").hidden = false;
     $("alertDismiss").textContent = stage === "warn" ? "OK" : "Got it";
     alertKey = key; alertTask = t;
     $("alertTitle").textContent = t.title;
@@ -848,7 +860,7 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
   const signerColor = n => (SIGNERS.find(x => x.name === n) || {}).color || "#444";
   function signedChip(name) {
     const el = document.createElement("span"); el.className = "signed";
-    el.style.background = signerColor(name); el.textContent = "Posted by " + name;
+    el.style.background = signerColor(name); el.style.setProperty("--who", signerColor(name)); el.textContent = "Posted by: " + name;
     return el;
   }
   let signResolve = null;
