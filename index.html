@@ -238,6 +238,9 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
 .locked{max-width:520px;margin:10vh auto 0;text-align:center;background:var(--panel);color:var(--panel-ink);border-radius:8px;padding:28px 24px}
 .locked h2{font-family:var(--f-display);font-weight:800;margin:0 0 8px}
 .locked p{margin:0;color:var(--muted)}
+.audio-btn{font-size:.85rem;font-weight:700;padding:6px 14px;border-radius:99px;background:var(--card);color:var(--card-ink);border:0}
+.audio-btn.off{background:transparent;color:var(--muted);border:1px solid var(--panel-line)}
+body.mode-add .audio-btn{display:none}
 .fs-hint{position:fixed;left:50%;transform:translateX(-50%);top:calc(16px + env(safe-area-inset-top,0px));z-index:35;background:var(--desk-ink);color:var(--desk);padding:10px 18px;border-radius:99px;font-weight:700;cursor:pointer;box-shadow:var(--shadow)}
 /* Got it sits lower, notes and date bold, task names sized to fit */
 .flash .gotit{margin-top:clamp(16px,5vh,64px)}
@@ -256,6 +259,7 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
       <h1>Biomed Board</h1>
       <span class="date" id="today"></span>
     </div>
+    <button type="button" class="audio-btn off" id="audioBtn">Click to turn on sound</button>
     <div class="clock" id="clock" aria-live="off">--:--</div>
     <div class="actions">
       <button class="btn-primary" id="openAdd" type="button">+ Add task</button>
@@ -361,7 +365,7 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
     </div>
   </div>
 </div>
-<div class="fs-hint" id="fsHint" hidden>Click anywhere for full screen</div>
+<div class="fs-hint" id="fsHint" hidden>Click anywhere for full screen and sound</div>
 
 <div class="alert" id="alert" hidden role="alertdialog" aria-labelledby="alertTitle">
   <div class="alert-inner">
@@ -406,7 +410,8 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
   let canWrite = true;
   let store = null;
   let lastKey = "";
-  let soundOn = false, audioCtx = null;
+  let soundOn = true, audioCtx = null;
+  try { soundOn = localStorage.getItem("biomed.sound") !== "off"; } catch {}
 
   // ---------- storage ----------
   const localStore = {
@@ -636,7 +641,6 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
 
     if (current && prevCur !== undefined && prevCur !== String(current.id) && lastKey) {
       flash.classList.remove("flip"); void flash.offsetWidth; flash.classList.add("flip");
-      if (soundOn) chime();
     }
 
     // later today: if no current, the "next" is already the big card
@@ -720,6 +724,9 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
   let alertKey = "", alertTask = null, alertIdx = 0, alertSwitchAt = 0, alertDate = "";
   const alertSeen = new Set();
   const warnAck = new Set();
+  const stageSounded = new Map();
+  const lastRepeat = { go: 0, late: 0, warn: 0 };
+  const louder = (a, b) => { const r = { warn: 1, go: 2, late: 3 }; return !a || r[b] > r[a] ? b : a; };
   let alertStage = "go";
   function updateAlert(today, list, nowSec, nowMin) {
     const el = $("alert");
@@ -747,7 +754,20 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
       $("alertWarn").textContent = stage === "warn" ? "Coming up in " + Math.ceil(L / 60) + " min"
         : stage === "go" ? "Starting in " + Math.ceil(L / 60) + " min"
         : (Math.floor(-L / 60) < 1 ? "Past due · just now" : "Past due · " + Math.floor(-L / 60) + " min late"); }
-    if (fresh && soundOn) chime();
+    // Sound: each task plays its stage sound once on entering the stage;
+    // red past-due repeats every 15 s and green every 60 s until Got it.
+    if (!soundOn || !audioCtx || audioCtx.state !== "running") return; // wait until sound is turned on
+    const nowS = Date.now();
+    let play = null;
+    pending.forEach(p => {
+      const st = left(p) > 300 ? "warn" : left(p) > 0 ? "go" : "late";
+      const k = today + "|" + p.id;
+      if (stageSounded.get(k) !== st) { stageSounded.set(k, st); play = louder(play, st); }
+    });
+    const anyLate = pending.some(p => left(p) <= 0), anyGo = pending.some(p => left(p) > 0 && left(p) <= 300);
+    if (anyLate && nowS - lastRepeat.late >= 15000) play = louder(play, "late");
+    else if (anyGo && nowS - lastRepeat.go >= 60000) play = louder(play, "go");
+    if (play) { lastRepeat[play] = nowS; playStage(play); }
   }
   function showAlert(t, key, list, nowMin, idx, count, stage) {
     const el = $("alert");
@@ -919,6 +939,55 @@ body:not(.mode-add) .done-sec{margin-top:0;padding:clamp(8px,1.4vh,16px) clamp(1
 
   // ---------- extras ----------
   function toast(msg) { const el = $("toast"); el.textContent = msg; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => el.hidden = true, 1800); }
+
+  // ---------- audio alerts ----------
+  function tone(ctx, f, start, dur, type, vol) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type; o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, start);
+    g.gain.exponentialRampToValueAtTime(vol, start + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+    o.connect(g).connect(ctx.destination); o.start(start); o.stop(start + dur + 0.05);
+  }
+  function playStage(stage) {
+    if (!soundOn || !audioCtx || audioCtx.state !== "running") return;
+    const c = audioCtx, t = c.currentTime + 0.05;
+    try {
+      if (stage === "warn") {            // yellow: soft two-note chime
+        tone(c, 523, t, 0.7, "sine", 0.25); tone(c, 659, t + 0.3, 0.9, "sine", 0.25);
+      } else if (stage === "go") {       // green: bright three-note chime
+        [659, 880, 1047].forEach((f, i) => tone(c, f, t + i * 0.22, 0.7, "sine", 0.32));
+      } else {                           // red: urgent beeping alarm
+        for (let r = 0; r < 2; r++) for (let i = 0; i < 3; i++) tone(c, 988, t + r * 0.9 + i * 0.2, 0.13, "square", 0.16);
+      }
+    } catch {}
+  }
+  function unlockAudio() {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === "suspended") audioCtx.resume().then(updateAudioBtn, updateAudioBtn);
+    } catch {}
+    updateAudioBtn();
+  }
+  function updateAudioBtn() {
+    const b = $("audioBtn"); if (!b) return;
+    const ready = audioCtx && audioCtx.state === "running";
+    b.textContent = !soundOn ? "Sound off" : ready ? "Sound on" : "Click to turn on sound";
+    b.classList.toggle("off", !soundOn || !ready);
+  }
+  document.addEventListener("pointerdown", unlockAudio, true);
+  document.addEventListener("keydown", unlockAudio, true);
+  $("audioBtn").addEventListener("click", e => {
+    e.stopPropagation();
+    unlockAudio();
+    if (audioCtx && audioCtx.state === "running") {
+      soundOn = !soundOn;
+      try { localStorage.setItem("biomed.sound", soundOn ? "on" : "off"); } catch {}
+      if (soundOn) playStage("go");
+    }
+    updateAudioBtn();
+  });
+  setTimeout(updateAudioBtn, 0);
 
   function chime() {
     try {
