@@ -725,7 +725,7 @@ body.mode-add .audio-btn{display:none}
   const alertSeen = new Set();
   const warnAck = new Set();
   const stageSounded = new Map();
-  const lastRepeat = { go: 0, late: 0, warn: 0 };
+  const lastRepeat = { any: 0 };
   const louder = (a, b) => { const r = { warn: 1, go: 2, late: 3 }; return !a || r[b] > r[a] ? b : a; };
   let alertStage = "go";
   function updateAlert(today, list, nowSec, nowMin) {
@@ -754,8 +754,7 @@ body.mode-add .audio-btn{display:none}
       $("alertWarn").textContent = stage === "warn" ? "Coming up in " + Math.ceil(L / 60) + " min"
         : stage === "go" ? "Starting in " + Math.ceil(L / 60) + " min"
         : (Math.floor(-L / 60) < 1 ? "Past due · just now" : "Past due · " + Math.floor(-L / 60) + " min late"); }
-    // Sound: each task plays its stage sound once on entering the stage;
-    // red past-due repeats every 15 s and green every 60 s until Got it.
+    // Sound: plays when a task enters a new stage, then every minute until OK / Got it.
     if (!soundOn || !audioCtx || audioCtx.state !== "running") return; // wait until sound is turned on
     const nowS = Date.now();
     let play = null;
@@ -764,10 +763,11 @@ body.mode-add .audio-btn{display:none}
       const k = today + "|" + p.id;
       if (stageSounded.get(k) !== st) { stageSounded.set(k, st); play = louder(play, st); }
     });
-    const anyLate = pending.some(p => left(p) <= 0), anyGo = pending.some(p => left(p) > 0 && left(p) <= 300);
-    if (anyLate && nowS - lastRepeat.late >= 15000) play = louder(play, "late");
-    else if (anyGo && nowS - lastRepeat.go >= 60000) play = louder(play, "go");
-    if (play) { lastRepeat[play] = nowS; playStage(play); }
+    // Repeat once a minute while any alert is showing, using the most urgent stage's sound.
+    if (!play && nowS - lastRepeat.any >= 60000) {
+      pending.forEach(p => { play = louder(play, left(p) > 300 ? "warn" : left(p) > 0 ? "go" : "late"); });
+    }
+    if (play) { lastRepeat.any = nowS; playStage(play); }
   }
   function showAlert(t, key, list, nowMin, idx, count, stage) {
     const el = $("alert");
