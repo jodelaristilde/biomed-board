@@ -729,6 +729,7 @@ body.mode-add .audio-btn{display:none}
   const alertDateKey = t => ymd(new Date()) + "|" + t.id;
   const stageSounded = new Map();
   const lastRepeat = { any: 0 };
+  const alarm = { start: 0, stage: null, last: 0 };
   const louder = (a, b) => { const r = { warn: 1, go: 2, late: 3 }; return !a || r[b] > r[a] ? b : a; };
   let alertStage = "go";
   function updateAlert(today, list, nowSec, nowMin) {
@@ -758,30 +759,21 @@ body.mode-add .audio-btn{display:none}
       $("alertWarn").textContent = stage === "warn" ? "Coming up in " + Math.ceil(L / 60) + " min"
         : stage === "go" ? "Starting in " + Math.ceil(L / 60) + " min"
         : (Math.floor(-L / 60) < 1 ? "Past due · just now" : "Past due · " + Math.floor(-L / 60) + " min late"); }
-    // Sound: plays when a task enters a stage, then every minute. Silence stops it for yellow/green;
-    // red always sounds every minute until Got it.
+    // Sound cycle: the most urgent un-silenced alert sounds nonstop (every 3 s) for 5 minutes,
+    // then stays quiet for 15 minutes, then repeats. It restarts at once when an alert changes
+    // color. Silence stops yellow/green; red keeps cycling until Got it.
     if (!soundOn || !audioCtx || audioCtx.state !== "running") return; // wait until sound is turned on
     const nowS = Date.now();
-    let play = null;
+    let top = null;
     pending.forEach(p => {
       const st = left(p) > 300 ? "warn" : left(p) > 0 ? "go" : "late";
-      const k = today + "|" + p.id;
-      if (st !== "late" && silenced.has(k)) return;
-      if (stageSounded.get(k) !== st) { stageSounded.set(k, st); play = louder(play, st); }
+      if (st !== "late" && silenced.has(today + "|" + p.id)) return;
+      top = louder(top, st);
     });
-    // Repeat once a minute while any alert is showing, using the most urgent stage's sound.
-    if (!play && nowS - lastRepeat.any >= 60000) {
-      pending.forEach(p => {
-        const st = left(p) > 300 ? "warn" : left(p) > 0 ? "go" : "late";
-        if (st !== "late" && silenced.has(today + "|" + p.id)) return;
-        play = louder(play, st);
-      });
-    }
-    if (play) { lastRepeat.any = nowS; playStage(play); }
-    // Yellow alarm is constant: the chime repeats every 3 seconds until someone clicks Silence.
-    const yellowOn = pending.some(p => left(p) > 300 && !silenced.has(today + "|" + p.id));
-    if (yellowOn && play !== "warn" && nowS - (lastRepeat.warn || 0) >= 3000) { lastRepeat.warn = nowS; playStage("warn"); }
-    else if (play === "warn") lastRepeat.warn = nowS;
+    if (!top) { alarm.start = 0; alarm.stage = null; return; }
+    if (!alarm.start || alarm.stage !== top) { alarm.start = nowS; alarm.stage = top; alarm.last = 0; }
+    const phase = (nowS - alarm.start) % (20 * 60000);
+    if (phase < 5 * 60000 && nowS - alarm.last >= 3000) { alarm.last = nowS; playStage(top); }
   }
   function showAlert(t, key, list, nowMin, idx, count, stage) {
     const el = $("alert");
