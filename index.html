@@ -245,6 +245,7 @@ body.mode-add .audio-btn{display:none}
 /* Got it sits lower, notes and date bold, task names sized to fit */
 .flash .gotit{margin-top:clamp(16px,5vh,64px)}
 .alert-dismiss{margin-top:clamp(20px,6vh,80px)}
+.alert-dismiss:disabled{opacity:.55;cursor:default}
 .flash .note,.alert .note{font-weight:700}
 .bigdate{font-weight:800}
 .flash h2,.alert h2{overflow-wrap:normal;word-break:normal;max-width:100%}
@@ -724,6 +725,8 @@ body.mode-add .audio-btn{display:none}
   let alertKey = "", alertTask = null, alertIdx = 0, alertSwitchAt = 0, alertDate = "";
   const alertSeen = new Set();
   const warnAck = new Set();
+  const silenced = new Set();
+  const alertDateKey = t => ymd(new Date()) + "|" + t.id;
   const stageSounded = new Map();
   const lastRepeat = { any: 0 };
   const louder = (a, b) => { const r = { warn: 1, go: 2, late: 3 }; return !a || r[b] > r[a] ? b : a; };
@@ -733,7 +736,8 @@ body.mode-add .audio-btn{display:none}
     if (mode === "add") return;
     const left = t => mins(t.time) * 60 - nowSec;
     // 10 to 5 minutes before: yellow warning (OK hides it). Last 5 minutes and after: green flash until Got it.
-    const pending = list.filter(t => left(t) <= 300 || (left(t) <= 900 && !warnAck.has(today + "|" + t.id)));
+    // Yellow 15-5 min, green last 5 min, red after. Every alert stays on screen until Got it (red only).
+    const pending = list.filter(t => left(t) <= 900);
     if (!pending.length) {
       alertTask = null; alertKey = ""; alertIdx = 0; alertSwitchAt = 0;
       if (!el.hidden) el.hidden = true;
@@ -748,24 +752,30 @@ body.mode-add .audio-btn{display:none}
     pending.forEach(p => { const k = today + "|" + p.id; if (!alertSeen.has(k)) { alertSeen.add(k); fresh = true; } });
     const stage = left(t) > 300 ? "warn" : left(t) > 0 ? "go" : "late";
     alertStage = stage;
-    const key = [today, t.id, t.time, t.title, t.note, alertIdx, pending.length, stage].join("|");
+    const key = [today, t.id, t.time, t.title, t.note, alertIdx, pending.length, stage, silenced.has(today + "|" + t.id)].join("|");
     if (key !== alertKey) showAlert(t, key, list, nowMin, alertIdx, pending.length, stage);
     { const L = left(t);
       $("alertWarn").textContent = stage === "warn" ? "Coming up in " + Math.ceil(L / 60) + " min"
         : stage === "go" ? "Starting in " + Math.ceil(L / 60) + " min"
         : (Math.floor(-L / 60) < 1 ? "Past due · just now" : "Past due · " + Math.floor(-L / 60) + " min late"); }
-    // Sound: plays when a task enters a new stage, then every minute until OK / Got it.
+    // Sound: plays when a task enters a stage, then every minute. Silence stops it for yellow/green;
+    // red always sounds every minute until Got it.
     if (!soundOn || !audioCtx || audioCtx.state !== "running") return; // wait until sound is turned on
     const nowS = Date.now();
     let play = null;
     pending.forEach(p => {
       const st = left(p) > 300 ? "warn" : left(p) > 0 ? "go" : "late";
       const k = today + "|" + p.id;
+      if (st !== "late" && silenced.has(k)) return;
       if (stageSounded.get(k) !== st) { stageSounded.set(k, st); play = louder(play, st); }
     });
     // Repeat once a minute while any alert is showing, using the most urgent stage's sound.
     if (!play && nowS - lastRepeat.any >= 60000) {
-      pending.forEach(p => { play = louder(play, left(p) > 300 ? "warn" : left(p) > 0 ? "go" : "late"); });
+      pending.forEach(p => {
+        const st = left(p) > 300 ? "warn" : left(p) > 0 ? "go" : "late";
+        if (st !== "late" && silenced.has(today + "|" + p.id)) return;
+        play = louder(play, st);
+      });
     }
     if (play) { lastRepeat.any = nowS; playStage(play); }
   }
@@ -774,7 +784,9 @@ body.mode-add .audio-btn{display:none}
     el.classList.toggle("warn", stage === "warn");
     el.classList.toggle("late", stage === "late");
     $("alertWarn").hidden = false;
-    $("alertDismiss").textContent = stage === "warn" ? "OK" : "Got it";
+    const isSilenced = silenced.has(alertDateKey(t));
+    $("alertDismiss").textContent = stage === "late" ? "Got it" : isSilenced ? "Silenced" : "Silence";
+    $("alertDismiss").disabled = stage !== "late" && isSilenced;
     alertKey = key; alertTask = t;
     $("alertTitle").textContent = t.title;
     $("alertTime").textContent = "at " + fmt12(t.time);
@@ -799,10 +811,10 @@ body.mode-add .audio-btn{display:none}
   }
   $("alertDismiss").onclick = () => {
     const t = alertTask, d = alertDate;
-    if (alertStage === "warn") {
-      // Acknowledge the yellow warning only; the green flash still comes at 5 minutes.
-      if (t) warnAck.add(d + "|" + t.id);
-      alertKey = ""; alertTask = null; alertSwitchAt = 0;
+    if (alertStage !== "late") {
+      // Yellow / green: Silence stops the sound; the alert stays on screen until Got it at red.
+      if (t) silenced.add(d + "|" + t.id);
+      alertKey = "";
       render(true);
       return;
     }
