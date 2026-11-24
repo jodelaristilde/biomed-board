@@ -778,6 +778,10 @@ body.mode-add .audio-btn{display:none}
       });
     }
     if (play) { lastRepeat.any = nowS; playStage(play); }
+    // Yellow alarm is constant: the chime repeats every 3 seconds until someone clicks Silence.
+    const yellowOn = pending.some(p => left(p) > 300 && !silenced.has(today + "|" + p.id));
+    if (yellowOn && play !== "warn" && nowS - (lastRepeat.warn || 0) >= 3000) { lastRepeat.warn = nowS; playStage("warn"); }
+    else if (play === "warn") lastRepeat.warn = nowS;
   }
   function showAlert(t, key, list, nowMin, idx, count, stage) {
     const el = $("alert");
